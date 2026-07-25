@@ -16,6 +16,7 @@
  * permissions. This tool acts on your own account, with your own credentials.
  */
 
+import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 import { config } from "../config.ts";
 import { LOGIN_TIMEOUT_MS, DEFAULT_SCOPES } from "../constants.ts";
@@ -73,6 +74,10 @@ export async function browserLogin(
     // just wait until they tell us they are done.
     if (opts.waitForUser) await opts.waitForUser();
 
+    // Ensure the home dir exists: Playwright's storageState write does NOT
+    // create missing parent directories, so on a fresh install this would
+    // otherwise fail after the user has already authenticated.
+    await mkdir(config.home, { recursive: true, mode: 0o700 });
     await context.storageState({ path: config.storageStatePath });
 
     const endpoints = inferEndpoints(capture.captures);

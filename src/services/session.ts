@@ -61,9 +61,14 @@ export async function requireSession(): Promise<Session> {
 }
 
 export async function clearSession(): Promise<void> {
+  // Remove everything the tool persisted, including the discovered endpoints and
+  // the raw captured responses — captures.json holds sampled account/transaction
+  // data, so logout must not leave financial data behind on disk.
   await Promise.allSettled([
     rm(config.sessionPath, { force: true }),
     rm(config.storageStatePath, { force: true }),
+    rm(config.endpointsPath, { force: true }),
+    rm(config.capturesPath, { force: true }),
   ]);
 }
 

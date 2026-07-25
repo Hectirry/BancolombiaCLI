@@ -20,7 +20,11 @@ import {
   normalizeAccounts,
   normalizeTransactions,
 } from "./discovery.ts";
-import { collectDistinctPages, withQueryParam } from "./pagination.ts";
+import {
+  collectDistinctPages,
+  withQueryParam,
+  applyTransactionQuery,
+} from "./pagination.ts";
 import {
   AccountSchema,
   TransactionSchema,
@@ -187,7 +191,14 @@ export async function getTransactions(
   // is ignored). Synthetic ids get a running offset so they stay unique.
   const endpoints = await loadEndpoints();
   if (!endpoints?.transactionsUrl) throw noEndpointError("transactions");
-  const baseUrl = endpoints.transactionsUrl;
+  // Re-scope the captured URL to the requested account/range before replaying it,
+  // so a query for a different account or period doesn't reuse the stale slice the
+  // user viewed at login. The local date filter below remains as a backstop.
+  const baseUrl = applyTransactionQuery(endpoints.transactionsUrl, {
+    accountId,
+    from: range.from,
+    to: range.to,
+  });
   let offset = 0;
   const { rows, truncated } = await collectDistinctPages<Transaction>(
     async (page) => {

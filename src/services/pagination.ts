@@ -88,3 +88,59 @@ export function withQueryParam(
     return `${url}${sep}${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
   }
 }
+
+export interface TransactionQuery {
+  accountId: string;
+  from: string;
+  to: string;
+}
+
+/** Does a (lowercased) query-param name look like an account selector? */
+function isAccountParam(k: string): boolean {
+  return k.includes("cuenta") || k.includes("account") || k.includes("producto");
+}
+/** …like a range start? */
+function isFromParam(k: string): boolean {
+  return (
+    k === "from" ||
+    k.includes("desde") ||
+    k.includes("inicial") ||
+    k.includes("inicio") ||
+    k.includes("startdate")
+  );
+}
+/** …like a range end? */
+function isToParam(k: string): boolean {
+  return (
+    k === "to" ||
+    k.includes("hasta") ||
+    k.includes("final") ||
+    k.includes("enddate") ||
+    (k.includes("fecha") && k.includes("fin"))
+  );
+}
+
+/**
+ * Re-scope a captured transactions URL to the requested account and date range.
+ *
+ * The URL captured during login carries whatever account/period the user happened
+ * to view, so replaying it verbatim for a different query would return stale data.
+ * The portal's exact parameter names are unknown, so we override the VALUE of any
+ * existing param whose name matches an account / from / to hint, leaving all other
+ * params intact. Params we don't recognise are left as captured; the caller still
+ * applies a local date filter as a backstop.
+ */
+export function applyTransactionQuery(url: string, q: TransactionQuery): string {
+  try {
+    const u = new URL(url);
+    for (const key of [...u.searchParams.keys()]) {
+      const k = key.toLowerCase();
+      if (isAccountParam(k)) u.searchParams.set(key, q.accountId);
+      else if (isFromParam(k)) u.searchParams.set(key, q.from);
+      else if (isToParam(k)) u.searchParams.set(key, q.to);
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}

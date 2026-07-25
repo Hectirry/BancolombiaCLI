@@ -1,4 +1,7 @@
 import { expect, test, describe } from "bun:test";
+import { mkdtemp, writeFile, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { isSessionExpired } from "../src/services/session.ts";
 import { SessionExpiredError } from "../src/errors.ts";
 import type { Session } from "../src/schemas/index.ts";
@@ -43,5 +46,36 @@ describe("SessionExpiredError", () => {
     expect(err.name).toBe("SessionExpiredError");
     expect(err.message).toContain("bancolombia login");
     expect(err.message).toContain("proxy returned 401");
+  });
+});
+
+describe("clearSession", () => {
+  // Runs in a subprocess so a temporary BANCOLOMBIA_HOME is honoured (config is
+  // resolved once per process from the env).
+  test("removes session, storage-state, endpoints AND captures", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "banco-clear-"));
+    for (const f of [
+      "session.json",
+      "storage-state.json",
+      "endpoints.json",
+      "captures.json",
+    ]) {
+      await writeFile(join(dir, f), "{}");
+    }
+
+    const proc = Bun.spawn({
+      cmd: [
+        "bun",
+        "-e",
+        "const {clearSession} = await import('./src/services/session.ts'); await clearSession();",
+      ],
+      env: { ...process.env, BANCOLOMBIA_HOME: dir },
+      cwd: process.cwd(),
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    await proc.exited;
+
+    expect(await readdir(dir)).toHaveLength(0);
   });
 });

@@ -2,6 +2,7 @@ import { expect, test, describe } from "bun:test";
 import {
   collectDistinctPages,
   withQueryParam,
+  applyTransactionQuery,
 } from "../src/services/pagination.ts";
 
 const numSig = (rows: number[]): string => rows.join(",");
@@ -112,5 +113,36 @@ describe("withQueryParam", () => {
     expect(out).toContain("page=3");
     expect(out).toContain("acc=5");
     expect(out).not.toContain("page=1");
+  });
+});
+
+describe("applyTransactionQuery", () => {
+  const q = { accountId: "ACC-NEW", from: "2026-08-01", to: "2026-08-31" };
+
+  test("overrides account and date params captured at login (ES names)", () => {
+    const captured =
+      "https://p.co/api/movimientos?numeroCuenta=OLD&fechaInicial=2026-07-01&fechaFinal=2026-07-31&x=keep";
+    const u = new URL(applyTransactionQuery(captured, q));
+    expect(u.searchParams.get("numeroCuenta")).toBe("ACC-NEW");
+    expect(u.searchParams.get("fechaInicial")).toBe("2026-08-01");
+    expect(u.searchParams.get("fechaFinal")).toBe("2026-08-31");
+    expect(u.searchParams.get("x")).toBe("keep"); // unrelated params untouched
+  });
+
+  test("overrides EN-style params too", () => {
+    const captured = "https://p.co/api/tx?account=OLD&from=2026-01-01&to=2026-01-31";
+    const u = new URL(applyTransactionQuery(captured, q));
+    expect(u.searchParams.get("account")).toBe("ACC-NEW");
+    expect(u.searchParams.get("from")).toBe("2026-08-01");
+    expect(u.searchParams.get("to")).toBe("2026-08-31");
+  });
+
+  test("leaves the URL unchanged when there are no recognisable params", () => {
+    const captured = "https://p.co/api/movimientos?token=abc";
+    expect(applyTransactionQuery(captured, q)).toBe(captured);
+  });
+
+  test("does not throw on an unparseable URL", () => {
+    expect(applyTransactionQuery("not a url", q)).toBe("not a url");
   });
 });
