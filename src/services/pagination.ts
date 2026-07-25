@@ -1,23 +1,29 @@
 /**
- * Pagination helpers for transaction history.
+ * Pagination for transaction history.
  *
- * Portals return long histories in pages. Two strategies are provided:
+ * Portals return long histories in pages, and their paging contract is not
+ * always trustworthy: some ignore the page parameter and re-serve the same page,
+ * some end with an empty page, some with a short one. `collectDistinctPages`
+ * handles all of these safely with a single rule set:
  *
- *  - `collectPages` — for endpoints with an explicit page index (connect mode):
- *    keep asking for the next page until one comes back short or empty.
+ *  - stop on an empty page (end of history);
+ *  - stop when a page's CONTENT signature repeats a page already seen — this
+ *    catches an endpoint that ignores paging and keeps returning page 1, so we
+ *    never loop or duplicate;
+ *  - stop after a short page when a `pageSize` is known (the natural last page);
+ *  - never exceed `maxPages` (a safety valve), reporting `truncated` when hit.
  *
- *  - `collectUntilNoNew` — a defensive paginator for browser mode, where the
- *    discovered endpoint's paging contract is unknown. It keeps fetching pages
- *    but stops as soon as a page contributes no new records (deduplicated by a
- *    caller-supplied key). This is robust even when the portal ignores the page
- *    parameter and simply re-serves page 1: the second page adds nothing new, so
- *    we stop instead of looping forever.
- *
- * Both cap the number of pages so a misbehaving endpoint can never hang the CLI.
+ * Crucially the stop decision is based on page CONTENT, not on record ids, so it
+ * works even when the records carry no stable id (synthesised ids would collide
+ * across pages and silently drop data if used for deduplication).
  */
 
 export interface PageOptions {
-  /** Records per page requested from the endpoint. */
+  /**
+   * Records per page requested from the endpoint. When provided, a page shorter
+   * than this ends the walk. When omitted, the walk relies on the empty-page and
+   * repeated-page signals instead.
+   */
   pageSize?: number;
   /** Hard cap on pages fetched, as a safety valve. */
   maxPages?: number;
@@ -25,60 +31,45 @@ export interface PageOptions {
   startPage?: number;
 }
 
-const DEFAULT_PAGE_SIZE = 100;
+export interface PagedResult<T> {
+  rows: T[];
+  /** True when the walk stopped at `maxPages` and more data may exist. */
+  truncated: boolean;
+}
+
 const DEFAULT_MAX_PAGES = 50;
 
 /**
- * Fetch sequential pages until one returns fewer than `pageSize` rows (the last
- * page) or is empty, or until `maxPages` is reached. `fetchPage` receives the
- * page index and must return that page's rows.
+ * Walk pages via `fetchPage(pageIndex)`, accumulating rows until a stop signal.
+ * `signatureOf` produces a stable, content-derived signature for a page so a
+ * re-served page can be detected regardless of record ids.
  */
-export async function collectPages<T>(
+export async function collectDistinctPages<T>(
   fetchPage: (page: number) => Promise<T[]>,
+  signatureOf: (rows: T[]) => string,
   opts: PageOptions = {},
-): Promise<T[]> {
-  const pageSize = opts.pageSize ?? DEFAULT_PAGE_SIZE;
+): Promise<PagedResult<T>> {
+  const { pageSize, startPage = 0 } = opts;
   const maxPages = opts.maxPages ?? DEFAULT_MAX_PAGES;
-  const startPage = opts.startPage ?? 0;
-
-  const out: T[] = [];
-  for (let i = 0; i < maxPages; i++) {
-    const page = await fetchPage(startPage + i);
-    out.push(...page);
-    // A short or empty page means we've reached the end of the history.
-    if (page.length < pageSize) break;
-  }
-  return out;
-}
-
-/**
- * Fetch pages until a page adds no new records. `keyOf` extracts a stable id per
- * record for deduplication. Safe against endpoints that ignore paging.
- */
-export async function collectUntilNoNew<T>(
-  fetchPage: (page: number) => Promise<T[]>,
-  keyOf: (row: T) => string,
-  opts: PageOptions = {},
-): Promise<T[]> {
-  const maxPages = opts.maxPages ?? DEFAULT_MAX_PAGES;
-  const startPage = opts.startPage ?? 1;
 
   const seen = new Set<string>();
   const out: T[] = [];
-  for (let i = 0; i < maxPages; i++) {
+  let i = 0;
+  for (; i < maxPages; i++) {
     const page = await fetchPage(startPage + i);
-    let added = 0;
-    for (const row of page) {
-      const key = keyOf(row);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(row);
-      added++;
-    }
-    // No new records on this page -> we're done (or the endpoint ignores paging).
-    if (added === 0) break;
+    if (page.length === 0) break; // end of history
+
+    const sig = signatureOf(page);
+    if (seen.has(sig)) break; // endpoint re-served a page -> stop, no duplication
+    seen.add(sig);
+
+    out.push(...page);
+
+    // A short page (when we know the page size) is the natural last page.
+    if (pageSize !== undefined && page.length < pageSize) break;
   }
-  return out;
+  // Ran the full budget without a natural stop -> there may be more history.
+  return { rows: out, truncated: i === maxPages };
 }
 
 /** Add or replace a query parameter on a URL, preserving the rest. */

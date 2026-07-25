@@ -20,11 +20,7 @@ import {
   normalizeAccounts,
   normalizeTransactions,
 } from "./discovery.ts";
-import {
-  collectPages,
-  collectUntilNoNew,
-  withQueryParam,
-} from "./pagination.ts";
+import { collectDistinctPages, withQueryParam } from "./pagination.ts";
 import {
   AccountSchema,
   TransactionSchema,
@@ -53,11 +49,36 @@ const TransactionListSchema = z.array(TransactionSchema);
 
 /**
  * A rejected saved login shows up as HTTP 401/403 or a redirect to the login
- * page. Treat those as an expired session with an actionable message.
+ * page. Treat those as an expired session with an actionable message. The URL
+ * check looks at the PATH only (never the query string) and requires a `/login`
+ * path segment, so a data endpoint like `/login-info` or a `?redirect=/login`
+ * query is not misread as an expiry.
  */
 function isAuthRejection(status: number, finalUrl?: string): boolean {
   if (status === 401 || status === 403) return true;
-  return finalUrl != null && /\/login/i.test(finalUrl);
+  if (!finalUrl) return false;
+  try {
+    return /\/login(\/|$)/i.test(new URL(finalUrl).pathname);
+  } catch {
+    return /\/login(\/|$)/i.test(finalUrl);
+  }
+}
+
+/** Content-derived signature of a transaction page (id-independent). */
+function txPageSignature(rows: Transaction[]): string {
+  return rows
+    .map((t) => `${t.date}|${t.amount.amount}|${t.description}`)
+    .join("");
+}
+
+/** Warn (on stderr, safe for MCP stdio) when a history walk was truncated. */
+function warnIfTruncated(truncated: boolean, accountId: string): void {
+  if (truncated) {
+    console.error(
+      `[bancolombia] warning: transaction history for ${accountId} hit the ` +
+        `page cap; results may be incomplete.`,
+    );
+  }
 }
 
 /** Fetch an absolute URL in browser mode, reusing the saved portal cookies. */
@@ -140,8 +161,9 @@ export async function getTransactions(
   const session = await requireSession();
 
   if (session.method === "connect") {
-    // Walk pages until the proxy returns a short/empty page.
-    const rows = await collectPages<unknown>(
+    // Walk pages until a short/empty page, or a re-served page (proxy ignoring
+    // the page param), whichever comes first.
+    const { rows, truncated } = await collectDistinctPages<Transaction>(
       async (page) =>
         TransactionListSchema.parse(
           await connectGet<unknown>(session, PATHS.transactions, {
@@ -152,27 +174,36 @@ export async function getTransactions(
             pageSize: String(TX_PAGE_SIZE),
           }),
         ),
+      txPageSignature,
       { pageSize: TX_PAGE_SIZE, startPage: 0 },
     );
-    return rows as Transaction[];
+    warnIfTruncated(truncated, accountId);
+    return rows;
   }
 
   // browser mode: replay the discovered transactions endpoint. The portal's
   // paging contract is unknown, so append a best-effort page parameter and stop
-  // as soon as a page yields no new transactions (safe even if it's ignored).
+  // as soon as a page's content repeats one already seen (safe even if the param
+  // is ignored). Synthetic ids get a running offset so they stay unique.
   const endpoints = await loadEndpoints();
   if (!endpoints?.transactionsUrl) throw noEndpointError("transactions");
   const baseUrl = endpoints.transactionsUrl;
-  const all = await collectUntilNoNew<Transaction>(
-    async (page) =>
-      normalizeTransactions(
+  let offset = 0;
+  const { rows, truncated } = await collectDistinctPages<Transaction>(
+    async (page) => {
+      const pageRows = normalizeTransactions(
         await browserGetJson(withQueryParam(baseUrl, BROWSER_PAGE_PARAM, String(page))),
         accountId,
-      ),
-    (t) => t.id,
+        offset,
+      );
+      offset += pageRows.length;
+      return pageRows;
+    },
+    txPageSignature,
     { startPage: 1 },
   );
-  return all.filter((t) => t.date >= range.from && t.date <= range.to);
+  warnIfTruncated(truncated, accountId);
+  return rows.filter((t) => t.date >= range.from && t.date <= range.to);
 }
 
 export interface FinancialSummary {

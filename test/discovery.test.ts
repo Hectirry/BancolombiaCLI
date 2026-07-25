@@ -159,6 +159,14 @@ describe("normalizeTransactions", () => {
     expect(txns[0]!.date).toBe("2026-07-05");
   });
 
+  test("offsets synthetic ids so paginated pages stay unique", () => {
+    const page = [{ fecha: "2026-07-01", valor: 1 }, { fecha: "2026-07-02", valor: 2 }];
+    const p1 = normalizeTransactions(page, "acct", 0);
+    const p2 = normalizeTransactions(page, "acct", 2);
+    expect(p1.map((t) => t.id)).toEqual(["tx-1", "tx-2"]);
+    expect(p2.map((t) => t.id)).toEqual(["tx-3", "tx-4"]);
+  });
+
   test("skips records with no amount and falls back on id/description", () => {
     const txns = normalizeTransactions(
       [

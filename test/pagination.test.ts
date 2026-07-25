@@ -1,11 +1,12 @@
 import { expect, test, describe } from "bun:test";
 import {
-  collectPages,
-  collectUntilNoNew,
+  collectDistinctPages,
   withQueryParam,
 } from "../src/services/pagination.ts";
 
-describe("collectPages", () => {
+const numSig = (rows: number[]): string => rows.join(",");
+
+describe("collectDistinctPages", () => {
   test("walks pages until a short final page", async () => {
     const pages = [
       [1, 2, 3],
@@ -13,71 +14,89 @@ describe("collectPages", () => {
       [7], // short -> stop after this
     ];
     const seen: number[] = [];
-    const out = await collectPages(
+    const { rows, truncated } = await collectDistinctPages(
       async (p) => {
         seen.push(p);
         return pages[p] ?? [];
       },
+      numSig,
       { pageSize: 3, startPage: 0 },
     );
-    expect(out).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(rows).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(seen).toEqual([0, 1, 2]); // did not fetch a 4th page
+    expect(truncated).toBe(false);
   });
 
   test("stops immediately on an empty first page", async () => {
     let calls = 0;
-    const out = await collectPages(
+    const { rows } = await collectDistinctPages(
       async () => {
         calls++;
         return [];
       },
+      numSig,
       { pageSize: 10 },
     );
-    expect(out).toEqual([]);
+    expect(rows).toEqual([]);
     expect(calls).toBe(1);
   });
 
-  test("respects maxPages as a safety cap", async () => {
+  test("stops without duplication when the endpoint ignores paging", async () => {
+    // MEDIUM regression: a proxy that re-serves a full page every call must not
+    // loop maxPages times duplicating the data.
     let calls = 0;
-    const out = await collectPages(
+    const { rows } = await collectDistinctPages(
       async () => {
         calls++;
-        return [1, 2]; // always full -> would loop forever without the cap
+        return [1, 2]; // same full page every time
       },
+      numSig,
+      { pageSize: 2 },
+    );
+    expect(rows).toEqual([1, 2]); // no duplication
+    expect(calls).toBe(2); // page 0 (new) + page 1 (repeat -> stop)
+  });
+
+  test("keeps distinct pages whose records share synthetic ids", async () => {
+    // HIGH regression: two genuinely different pages whose id-less records get
+    // the same synthetic ids ("tx-1", "tx-2") must both be kept. The stop
+    // decision is content-based, so it does not collapse them.
+    const pages = [
+      [{ id: "tx-1", c: "A" }, { id: "tx-2", c: "B" }],
+      [{ id: "tx-1", c: "C" }, { id: "tx-2", c: "D" }],
+      [],
+    ];
+    const { rows } = await collectDistinctPages(
+      async (p) => pages[p] ?? [],
+      (r) => r.map((x) => x.c).join(","),
+      { pageSize: 2, startPage: 0 },
+    );
+    expect(rows.map((r) => r.c)).toEqual(["A", "B", "C", "D"]);
+  });
+
+  test("reports truncated and respects maxPages", async () => {
+    let calls = 0;
+    const { rows, truncated } = await collectDistinctPages(
+      async (p) => {
+        calls++;
+        return [p * 10, p * 10 + 1]; // unique full page each time
+      },
+      numSig,
       { pageSize: 2, maxPages: 4 },
     );
     expect(calls).toBe(4);
-    expect(out).toHaveLength(8);
-  });
-});
-
-describe("collectUntilNoNew", () => {
-  test("accumulates until a page adds no new keys", async () => {
-    const pages = [
-      [{ id: "a" }, { id: "b" }],
-      [{ id: "c" }],
-      [], // nothing new -> stop
-    ];
-    const out = await collectUntilNoNew(
-      async (p) => pages[p - 1] ?? [],
-      (r) => r.id,
-      { startPage: 1 },
-    );
-    expect(out.map((r) => r.id)).toEqual(["a", "b", "c"]);
+    expect(rows).toHaveLength(8);
+    expect(truncated).toBe(true);
   });
 
-  test("stops when the endpoint ignores paging and re-serves page 1", async () => {
-    let calls = 0;
-    const firstPage = [{ id: "x" }, { id: "y" }];
-    const out = await collectUntilNoNew(
-      async () => {
-        calls++;
-        return firstPage; // same rows every time
-      },
-      (r) => r.id,
+  test("works without a pageSize, relying on empty/repeat signals", async () => {
+    const pages = [[1], [2], []];
+    const { rows } = await collectDistinctPages(
+      async (p) => pages[p] ?? [],
+      numSig,
+      { startPage: 0 },
     );
-    expect(out.map((r) => r.id)).toEqual(["x", "y"]);
-    expect(calls).toBe(2); // page 1 (new) + page 2 (nothing new -> stop)
+    expect(rows).toEqual([1, 2]);
   });
 });
 

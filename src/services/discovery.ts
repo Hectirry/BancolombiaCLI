@@ -283,6 +283,12 @@ export function normalizeAccounts(raw: unknown): Account[] {
 export function normalizeTransactions(
   raw: unknown,
   accountId: string,
+  /**
+   * Base for synthesised ids when a record has none. Callers paginating across
+   * multiple pages pass the running count so synthetic ids stay unique instead
+   * of restarting at `tx-1` on every page.
+   */
+  idOffset = 0,
 ): Transaction[] {
   const records = firstRecordArray(raw) ?? [];
   const out: Transaction[] = [];
@@ -292,7 +298,9 @@ export function normalizeTransactions(
     const dateRaw = pick(rec, DISCOVERY_HINTS.dateKeys);
     if (amountRaw === undefined) continue;
     const candidate = {
-      id: String(pick(rec, ["id", "referencia", "reference"]) ?? `tx-${i + 1}`),
+      id: String(
+        pick(rec, ["id", "referencia", "reference"]) ?? `tx-${idOffset + i + 1}`,
+      ),
       accountId,
       date: toIsoDate(dateRaw),
       description: String(pick(rec, DISCOVERY_HINTS.nameKeys) ?? "—"),
