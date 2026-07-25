@@ -20,13 +20,25 @@ export const STORAGE_STATE_FILE = "storage-state.json";
 /** Default port for the local REST API (`bancolombia server`). */
 export const DEFAULT_API_PORT = 3200;
 
-/** Public entry point of the personal-banking portal automated by the login. */
+/**
+ * Login page of Bancolombia's "Sucursal Virtual Personas" — the real personal
+ * banking portal automated by `bancolombia login`.
+ *
+ * Alternative entry point: https://svpersonas.apps.bancolombia.com (redirects
+ * here). Always confirm the domain in the address bar before entering
+ * credentials. Override with BANCOLOMBIA_PORTAL_URL if the portal changes.
+ */
 export const DEFAULT_PORTAL_URL =
-  "https://sucursalpersonas.transaccionesbancolombia.com";
+  "https://sucursalpersonas.transaccionesbancolombia.com/bancos/login/login";
 
 /**
- * Selectors used by the Playwright login flow. Kept together so they can be
- * adjusted without touching control flow. These are best-effort defaults.
+ * Selectors used by the Playwright login flow.
+ *
+ * ⚠️ UNVERIFIED against the live portal. These are generic best-effort guesses;
+ * the real Sucursal Virtual Personas markup (input names, the post-login
+ * marker) is not published and changes over time. Before the browser login can
+ * drive the real site reliably, open the portal in a browser, inspect the login
+ * form, and replace these values. They are isolated here for exactly that.
  */
 export const PORTAL_SELECTORS = {
   usernameInput: 'input[name="username"], input#username',
