@@ -181,7 +181,7 @@ function pick(rec: Record<string, unknown>, keys: readonly string[]): unknown {
  * where "." is the thousands separator and "," the decimal separator
  * (e.g. "4.250.000" -> 4250000, "1.234,50" -> 1234.5, "-215.400" -> -215400).
  */
-function toNumber(value: unknown): number {
+export function toNumber(value: unknown): number {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return 0;
 
@@ -206,17 +206,49 @@ function toNumber(value: unknown): number {
   return negative ? -n : n;
 }
 
-function guessType(name: string): AccountType {
-  const n = name.toLowerCase();
+/** Lowercase and strip diacritics so "Crédito"/"Inversión" match the hints. */
+export function foldText(s: string): string {
+  return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
+export function guessType(name: string): AccountType {
+  const n = foldText(name);
+  // Card-specific tokens win first: "Tarjeta de Crédito" is a card, not a loan.
+  if (n.includes("tarjeta") || n.includes("card")) return "credit_card";
+  if (
+    n.includes("credito") ||
+    n.includes("prestamo") ||
+    n.includes("hipotec") ||
+    n.includes("vivienda") ||
+    n.includes("libranza") ||
+    n.includes("loan")
+  )
+    return "loan";
   if (n.includes("ahorro") || n.includes("saving")) return "savings";
   if (n.includes("corriente") || n.includes("checking")) return "checking";
-  if (n.includes("credito") || n.includes("tarjeta") || n.includes("card"))
-    return "credit_card";
-  if (n.includes("credito") || n.includes("loan") || n.includes("prestamo"))
-    return "loan";
   if (n.includes("inversion") || n.includes("cdt") || n.includes("invest"))
     return "investment";
   return "other";
+}
+
+/**
+ * Normalise a captured date onto ISO YYYY-MM-DD. Handles ISO strings and
+ * timestamps (takes the leading date part) and Colombian day-first formats
+ * (DD/MM/YYYY, DD-MM-YYYY, optionally followed by a time). Unrecognised values
+ * fall back to the leading 10 chars so downstream still sees the original
+ * rather than a silently corrupted value.
+ */
+export function toIsoDate(value: unknown): string {
+  const s = String(value ?? "").trim();
+  if (!s) return "1970-01-01";
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m!.padStart(2, "0")}-${d!.padStart(2, "0")}`;
+  }
+  return s.slice(0, 10) || "1970-01-01";
 }
 
 /**
@@ -232,7 +264,9 @@ export function normalizeAccounts(raw: unknown): Account[] {
     const name = String(pick(rec, DISCOVERY_HINTS.nameKeys) ?? `Cuenta ${i + 1}`);
     const number = String(pick(rec, DISCOVERY_HINTS.numberKeys) ?? "");
     const balanceRaw = pick(rec, DISCOVERY_HINTS.balanceKeys);
-    if (balanceRaw === undefined) continue; // not an account record
+    // No usable balance -> not an account record; skip rather than emit a
+    // phantom zero-balance account.
+    if (balanceRaw === undefined || balanceRaw === null) continue;
     const candidate = {
       id: number || String(pick(rec, ["id"]) ?? `acct-${i + 1}`),
       name,
@@ -260,7 +294,7 @@ export function normalizeTransactions(
     const candidate = {
       id: String(pick(rec, ["id", "referencia", "reference"]) ?? `tx-${i + 1}`),
       accountId,
-      date: String(dateRaw ?? "").slice(0, 10) || "1970-01-01",
+      date: toIsoDate(dateRaw),
       description: String(pick(rec, DISCOVERY_HINTS.nameKeys) ?? "—"),
       amount: { amount: toNumber(amountRaw), currency: "COP" },
     };
