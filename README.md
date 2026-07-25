@@ -53,8 +53,11 @@ real time — acting as a full financial advisor over **your own** banking data.
 
 Requires [Bun](https://bun.sh) ≥ 1.1.
 
+The package is published as **`@hectirry/bancolombia-cli`** (public), exposing a
+single `bancolombia` binary.
+
 ```bash
-# Global install
+# Global install (once published to npm)
 bun add -g @hectirry/bancolombia-cli
 
 # …or from source
@@ -63,6 +66,11 @@ cd bancolombiacli
 bun install
 bun link          # exposes the `bancolombia` command globally
 ```
+
+Working from a clone without linking? Every command below also runs directly via
+`bun run src/index.ts <command>` — for example `bun run src/index.ts accounts`.
+Throughout this README, `bancolombia <command>` and `bun run src/index.ts
+<command>` are interchangeable.
 
 The `postinstall` step downloads the Chromium build Playwright needs for browser
 login. If you only use headless `connect` mode, you can skip it.
@@ -106,12 +114,50 @@ bancolombia login                                   Interactive browser login
 bancolombia connect <user> <pin> [api-url]          Headless login via API proxy
 bancolombia accounts                                List accounts + net worth
 bancolombia balance [accountId]                     Quick balance(s)
-bancolombia transactions <accountId> <from> <to>    Transaction history (YYYY-MM-DD)
+bancolombia transactions <accountId> <from> <to>    Full transaction history (YYYY-MM-DD)
 bancolombia whoami                                  Show the current session
+bancolombia captures                                Show endpoints/data discovered at login
 bancolombia logout                                  Clear the session
 bancolombia server [--port 3200]                    Start the local REST API
 bancolombia mcp                                     Start the MCP server (stdio)
 ```
+
+`transactions` fetches the **complete** history for the date range, not just the
+first page — see [Transaction pagination](#transaction-pagination) below.
+
+## Transaction pagination
+
+`bancolombia transactions <accountId> <from> <to>` returns **every** page of
+history for the range, not just the first. How it walks the pages depends on the
+session mode:
+
+- **Connect mode** — the proxy exposes an explicit page index, so the tool
+  requests successive pages (`page` / `pageSize`, 100 records per page) until a
+  page comes back short or empty.
+- **Browser mode** — the real portal's paging contract is unknown, so the tool
+  appends a best-effort page parameter to the discovered endpoint and stops as
+  soon as a page yields no new transactions (deduplicated by id). This is safe
+  even if the portal ignores paging entirely — a re-served first page simply adds
+  nothing new and paging stops. The parameter name defaults to `page` and is
+  configurable via `BANCOLOMBIA_TX_PAGE_PARAM`.
+
+Both paths cap the number of pages fetched, so a misbehaving endpoint can never
+hang the CLI.
+
+## Session expiry
+
+Sessions don't last forever, and the tool now fails with a clear, actionable
+message instead of an opaque error when one lapses:
+
+- **Connect mode** sessions record an `expiresAt`; once past it — or when the
+  proxy rejects the saved token with `401` / `403` — commands raise
+  *"Your Bancolombia session has expired … run `bancolombia connect` again"*.
+- **Browser mode** sessions expire opaquely on the cookie side. Expiry is
+  detected lazily: when the portal rejects the saved cookies (a `401` / `403`, or
+  a redirect to the login page), the same actionable error is raised, pointing
+  you at `bancolombia login`.
+
+In both cases, re-run the matching login command to establish a fresh session.
 
 ## REST API
 
@@ -159,6 +205,7 @@ All optional — see [`.env.example`](./.env.example). Notable variables:
 | `BANCOLOMBIA_PORTAL_URL` | Bancolombia portal | Site automated by browser login |
 | `BANCOLOMBIA_API_URL` | — | Default headless proxy URL |
 | `BANCOLOMBIA_HEADFUL` | `false` | Show the browser window during login |
+| `BANCOLOMBIA_TX_PAGE_PARAM` | `page` | Query param appended when paging browser-mode transactions |
 
 ## Architecture
 
