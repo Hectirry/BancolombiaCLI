@@ -83,6 +83,14 @@ program
   });
 
 program
+  .command("captures")
+  .description("Show endpoints/data discovered during browser login")
+  .action(async () => {
+    const { capturesCommand } = await import("./commands/captures.ts");
+    await capturesCommand();
+  });
+
+program
   .command("logout")
   .description("Clear the stored session and credentials")
   .action(async () => {
