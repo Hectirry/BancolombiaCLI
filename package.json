@@ -1,0 +1,46 @@
+{
+  "name": "@hectirry/bancolombia-cli",
+  "version": "0.1.0",
+  "description": "CLI and Model Context Protocol (MCP) server for your Bancolombia accounts. Log in once and let Claude act as a real-time financial advisor over your own banking data.",
+  "keywords": [
+    "bancolombia",
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "cli",
+    "personal-finance",
+    "open-banking"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "module": "src/index.ts",
+  "bin": {
+    "bancolombia": "src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "mcp": "bun run src/mcp/index.ts",
+    "server": "bun run src/index.ts server",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "playwright install chromium || true"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.4.0",
+    "commander": "^12.1.0",
+    "hono": "^4.6.0",
+    "playwright": "^1.47.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.6.0"
+  }
+}
