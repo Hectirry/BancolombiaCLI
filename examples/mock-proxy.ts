@@ -71,6 +71,22 @@ const TRANSACTIONS: Record<string, Transaction[]> = {
       amount: { amount: -38_900, currency: "COP" },
       category: "subscriptions",
     },
+    {
+      id: "t4",
+      accountId: "ahorros-01",
+      date: "2026-07-20",
+      description: "Transferencia PSE",
+      amount: { amount: -120_000, currency: "COP" },
+      category: "transfers",
+    },
+    {
+      id: "t5",
+      accountId: "ahorros-01",
+      date: "2026-07-22",
+      description: "Rappi",
+      amount: { amount: -54_300, currency: "COP" },
+      category: "delivery",
+    },
   ],
 };
 
@@ -108,10 +124,19 @@ app.get("/api/transactions", (ctx) => {
   const accountId = ctx.req.query("accountId") ?? "";
   const from = ctx.req.query("from") ?? "0000-00-00";
   const to = ctx.req.query("to") ?? "9999-99-99";
-  const txns = (TRANSACTIONS[accountId] ?? []).filter(
+  const matching = (TRANSACTIONS[accountId] ?? []).filter(
     (t) => t.date >= from && t.date <= to,
   );
-  return ctx.json(txns);
+
+  // Pagination: the client walks `page` (0-based) with a `pageSize`. Return the
+  // requested slice so `collectPages` sees a short final page and stops.
+  const pageSize = Number.parseInt(ctx.req.query("pageSize") ?? "100", 10);
+  const page = Number.parseInt(ctx.req.query("page") ?? "0", 10);
+  if (Number.isFinite(pageSize) && pageSize > 0) {
+    const start = Math.max(0, page) * pageSize;
+    return ctx.json(matching.slice(start, start + pageSize));
+  }
+  return ctx.json(matching);
 });
 
 serve({ port: PORT, fetch: app.fetch });

@@ -11,14 +11,20 @@
  * schemas, so downstream consumers (CLI, REST API, MCP) always get clean data.
  */
 
-import { request as httpRequest } from "../http.ts";
+import { request as httpRequest, HttpError } from "../http.ts";
 import { config } from "../config.ts";
 import { requireSession } from "./session.ts";
+import { SessionExpiredError } from "../errors.ts";
 import {
   loadEndpoints,
   normalizeAccounts,
   normalizeTransactions,
 } from "./discovery.ts";
+import {
+  collectPages,
+  collectUntilNoNew,
+  withQueryParam,
+} from "./pagination.ts";
 import {
   AccountSchema,
   TransactionSchema,
@@ -28,6 +34,11 @@ import {
   type Session,
 } from "../schemas/index.ts";
 import { z } from "zod";
+
+/** Records requested per transactions page. */
+const TX_PAGE_SIZE = 100;
+/** Query parameter the browser-mode paginator appends (portal-dependent). */
+const BROWSER_PAGE_PARAM = process.env.BANCOLOMBIA_TX_PAGE_PARAM ?? "page";
 
 /** Logical API paths, resolved against the session's base URL / portal. */
 const PATHS = {
@@ -40,6 +51,15 @@ const PATHS = {
 const AccountListSchema = z.array(AccountSchema);
 const TransactionListSchema = z.array(TransactionSchema);
 
+/**
+ * A rejected saved login shows up as HTTP 401/403 or a redirect to the login
+ * page. Treat those as an expired session with an actionable message.
+ */
+function isAuthRejection(status: number, finalUrl?: string): boolean {
+  if (status === 401 || status === 403) return true;
+  return finalUrl != null && /\/login/i.test(finalUrl);
+}
+
 /** Fetch an absolute URL in browser mode, reusing the saved portal cookies. */
 async function browserGetJson(url: string): Promise<unknown> {
   const { request: pwRequest } = await import("playwright");
@@ -48,6 +68,9 @@ async function browserGetJson(url: string): Promise<unknown> {
   });
   try {
     const res = await ctx.get(url);
+    if (isAuthRejection(res.status(), res.url())) {
+      throw new SessionExpiredError(`portal returned ${res.status()}`);
+    }
     if (!res.ok()) {
       throw new Error(
         `Portal request failed (${res.status()} ${res.statusText()}) for ${url}`,
@@ -67,7 +90,14 @@ async function connectGet<T>(
 ): Promise<T> {
   const qs = query ? `?${new URLSearchParams(query).toString()}` : "";
   const base = (session.apiUrl ?? "").replace(/\/$/, "");
-  return httpRequest<T>(`${base}${path}${qs}`, { token: session.token });
+  try {
+    return await httpRequest<T>(`${base}${path}${qs}`, { token: session.token });
+  } catch (err) {
+    if (err instanceof HttpError && isAuthRejection(err.status)) {
+      throw new SessionExpiredError(`proxy returned ${err.status}`);
+    }
+    throw err;
+  }
 }
 
 function noEndpointError(kind: "accounts" | "transactions"): Error {
@@ -110,38 +140,63 @@ export async function getTransactions(
   const session = await requireSession();
 
   if (session.method === "connect") {
-    return TransactionListSchema.parse(
-      await connectGet<unknown>(session, PATHS.transactions, {
-        accountId,
-        from: range.from,
-        to: range.to,
-      }),
+    // Walk pages until the proxy returns a short/empty page.
+    const rows = await collectPages<unknown>(
+      async (page) =>
+        TransactionListSchema.parse(
+          await connectGet<unknown>(session, PATHS.transactions, {
+            accountId,
+            from: range.from,
+            to: range.to,
+            page: String(page),
+            pageSize: String(TX_PAGE_SIZE),
+          }),
+        ),
+      { pageSize: TX_PAGE_SIZE, startPage: 0 },
     );
+    return rows as Transaction[];
   }
 
-  // browser mode: replay the discovered transactions endpoint, filter by range.
+  // browser mode: replay the discovered transactions endpoint. The portal's
+  // paging contract is unknown, so append a best-effort page parameter and stop
+  // as soon as a page yields no new transactions (safe even if it's ignored).
   const endpoints = await loadEndpoints();
   if (!endpoints?.transactionsUrl) throw noEndpointError("transactions");
-  const all = normalizeTransactions(
-    await browserGetJson(endpoints.transactionsUrl),
-    accountId,
+  const baseUrl = endpoints.transactionsUrl;
+  const all = await collectUntilNoNew<Transaction>(
+    async (page) =>
+      normalizeTransactions(
+        await browserGetJson(withQueryParam(baseUrl, BROWSER_PAGE_PARAM, String(page))),
+        accountId,
+      ),
+    (t) => t.id,
+    { startPage: 1 },
   );
   return all.filter((t) => t.date >= range.from && t.date <= range.to);
 }
 
-/** Aggregate view handy for a "financial advisor" summary. */
-export async function getFinancialSummary(): Promise<{
+export interface FinancialSummary {
   accounts: Account[];
   totalsByCurrency: Record<string, number>;
-}> {
-  const accounts = await getAccounts();
+}
+
+/**
+ * Pure net-worth aggregation: credit cards and loans are debt, so their
+ * balances are subtracted from the per-currency total. Kept separate from I/O
+ * so it can be unit-tested directly.
+ */
+export function summarizeAccounts(accounts: Account[]): FinancialSummary {
   const totalsByCurrency: Record<string, number> = {};
   for (const acc of accounts) {
     const { currency, amount } = acc.balance;
-    // Credit cards / loans represent debt; subtract them from net worth.
     const signed =
       acc.type === "credit_card" || acc.type === "loan" ? -amount : amount;
     totalsByCurrency[currency] = (totalsByCurrency[currency] ?? 0) + signed;
   }
   return { accounts, totalsByCurrency };
+}
+
+/** Aggregate view handy for a "financial advisor" summary. */
+export async function getFinancialSummary(): Promise<FinancialSummary> {
+  return summarizeAccounts(await getAccounts());
 }

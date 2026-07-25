@@ -12,6 +12,9 @@
     "open-banking"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "module": "src/index.ts",
   "bin": {

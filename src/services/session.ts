@@ -9,6 +9,7 @@ import { mkdir, readFile, writeFile, rm, chmod, access } from "node:fs/promises"
 import { constants as FS } from "node:fs";
 import { config } from "../config.ts";
 import { SessionSchema, type Session } from "../schemas/index.ts";
+import { SessionExpiredError } from "../errors.ts";
 
 async function ensureHome(): Promise<void> {
   await mkdir(config.home, { recursive: true, mode: 0o700 });
@@ -32,6 +33,19 @@ export async function loadSession(): Promise<Session | null> {
   }
 }
 
+/**
+ * Whether a session has passed its expiry. Only connect-mode sessions carry an
+ * `expiresAt`; browser sessions expire opaquely (cookie-side) and are detected
+ * lazily when the portal rejects a request, so an absent `expiresAt` is treated
+ * as "not known to be expired".
+ */
+export function isSessionExpired(session: Session, now: Date = new Date()): boolean {
+  if (!session.expiresAt) return false;
+  const at = Date.parse(session.expiresAt);
+  if (Number.isNaN(at)) return false;
+  return at <= now.getTime();
+}
+
 export async function requireSession(): Promise<Session> {
   const session = await loadSession();
   if (!session) {
@@ -39,6 +53,9 @@ export async function requireSession(): Promise<Session> {
       "Not logged in. Run `bancolombia login` (browser) or " +
         "`bancolombia connect <user> <pin> [api-url]` (headless) first.",
     );
+  }
+  if (isSessionExpired(session)) {
+    throw new SessionExpiredError(`token expired at ${session.expiresAt}`);
   }
   return session;
 }
