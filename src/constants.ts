@@ -16,6 +16,27 @@ export const DEFAULT_HOME_DIRNAME = ".bancolombia";
 /** File names inside the home directory. */
 export const SESSION_FILE = "session.json";
 export const STORAGE_STATE_FILE = "storage-state.json";
+/** Endpoints discovered from the real portal during an authenticated session. */
+export const ENDPOINTS_FILE = "endpoints.json";
+/** Raw JSON API responses captured during discovery (for mapping/debugging). */
+export const CAPTURES_FILE = "captures.json";
+
+/**
+ * Heuristics used to recognise data endpoints in captured network traffic.
+ * The real portal's internal API is undocumented; rather than hardcode guessed
+ * paths, we watch the authenticated session and match on these signals.
+ */
+export const DISCOVERY_HINTS = {
+  // URL fragments that suggest an accounts/products or movements endpoint.
+  accountUrl: ["cuenta", "account", "producto", "product", "saldo", "balance"],
+  transactionUrl: ["movimiento", "movim", "transaccion", "transaction", "extracto"],
+  // Object keys that suggest a balance/account-like record (ES + EN).
+  balanceKeys: ["saldo", "balance", "saldoDisponible", "availableBalance"],
+  numberKeys: ["numero", "number", "cuenta", "account", "numeroProducto"],
+  nameKeys: ["nombre", "name", "descripcion", "description", "alias", "producto"],
+  amountKeys: ["valor", "amount", "monto", "importe"],
+  dateKeys: ["fecha", "date", "fechaTransaccion", "fechaMovimiento"],
+} as const;
 
 /** Default port for the local REST API (`bancolombia server`). */
 export const DEFAULT_API_PORT = 3200;
@@ -30,24 +51,6 @@ export const DEFAULT_API_PORT = 3200;
  */
 export const DEFAULT_PORTAL_URL =
   "https://sucursalpersonas.transaccionesbancolombia.com/bancos/login/login";
-
-/**
- * Selectors used by the Playwright login flow.
- *
- * ⚠️ UNVERIFIED against the live portal. These are generic best-effort guesses;
- * the real Sucursal Virtual Personas markup (input names, the post-login
- * marker) is not published and changes over time. Before the browser login can
- * drive the real site reliably, open the portal in a browser, inspect the login
- * form, and replace these values. They are isolated here for exactly that.
- */
-export const PORTAL_SELECTORS = {
-  usernameInput: 'input[name="username"], input#username',
-  passwordInput: 'input[type="password"], input[name="password"]',
-  submitButton: 'button[type="submit"], input[type="submit"]',
-  otpInput: 'input[name="otp"], input[autocomplete="one-time-code"]',
-  // A selector that only appears once the user is authenticated.
-  loggedInMarker: '[data-authenticated], .dashboard, #home',
-} as const;
 
 /** How long (ms) to wait for interactive steps such as OTP entry. */
 export const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;

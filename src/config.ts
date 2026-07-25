@@ -6,9 +6,11 @@
 import { homedir } from "node:os";
 import { join, isAbsolute } from "node:path";
 import {
+  CAPTURES_FILE,
   DEFAULT_API_PORT,
   DEFAULT_HOME_DIRNAME,
   DEFAULT_PORTAL_URL,
+  ENDPOINTS_FILE,
   SESSION_FILE,
   STORAGE_STATE_FILE,
 } from "./constants.ts";
@@ -41,6 +43,8 @@ export const config = {
   home,
   sessionPath: join(home, SESSION_FILE),
   storageStatePath: join(home, STORAGE_STATE_FILE),
+  endpointsPath: join(home, ENDPOINTS_FILE),
+  capturesPath: join(home, CAPTURES_FILE),
 
   /** Local REST API port for `bancolombia server`. */
   apiPort: envInt("BANCOLOMBIA_API_PORT", DEFAULT_API_PORT),

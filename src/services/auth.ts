@@ -18,13 +18,14 @@
 
 import { chromium } from "playwright";
 import { config } from "../config.ts";
-import {
-  LOGIN_TIMEOUT_MS,
-  PORTAL_SELECTORS,
-  DEFAULT_SCOPES,
-} from "../constants.ts";
+import { LOGIN_TIMEOUT_MS, DEFAULT_SCOPES } from "../constants.ts";
 import { request } from "../http.ts";
 import { saveSession } from "./session.ts";
+import {
+  attachCapture,
+  inferEndpoints,
+  saveDiscovery,
+} from "./discovery.ts";
 import type { Session } from "../schemas/index.ts";
 
 function maskUser(user: string): string {
@@ -37,38 +38,45 @@ function nowIso(): string {
 }
 
 export interface BrowserLoginOptions {
-  /** Prompt used to pause for interactive OTP entry. */
-  waitForOtp?: () => Promise<void>;
+  /**
+   * Called after the browser opens. Resolve it (e.g. when the user presses
+   * Enter) once they have logged in AND opened their accounts / movements so the
+   * network capture has seen the real data endpoints.
+   */
+  waitForUser?: () => Promise<void>;
 }
 
 /**
- * Launch a browser, let the user authenticate on the real portal, then persist
- * the storage state for reuse. Returns the saved session.
+ * Launch a browser, let the user authenticate on the REAL portal themselves,
+ * capture the JSON endpoints their session calls, and persist the storage state
+ * plus the discovered endpoints for reuse.
+ *
+ * The user types their own credentials + OTP in the visible window — we never
+ * handle them and never rely on guessed form selectors. What we keep is the
+ * resulting cookies and the endpoint URLs observed during the session.
  */
 export async function browserLogin(
   opts: BrowserLoginOptions = {},
-): Promise<Session> {
-  const browser = await chromium.launch({ headless: !config.headful });
+): Promise<Session & { discovered: number }> {
+  // Login is inherently interactive: force a visible window regardless of the
+  // headless default so the user can actually authenticate.
+  const browser = await chromium.launch({ headless: false });
   try {
     const context = await browser.newContext();
     const page = await context.newPage();
     page.setDefaultTimeout(LOGIN_TIMEOUT_MS);
 
+    const capture = attachCapture(page);
     await page.goto(config.portalUrl, { waitUntil: "domcontentloaded" });
 
-    // Wait until the user has completed login (credentials + OTP). We detect a
-    // post-login marker; if the portal layout changes, update PORTAL_SELECTORS.
-    await page
-      .waitForSelector(PORTAL_SELECTORS.loggedInMarker, {
-        timeout: LOGIN_TIMEOUT_MS,
-      })
-      .catch(() => {
-        /* Fall through: some layouts have no obvious marker. */
-      });
-
-    if (opts.waitForOtp) await opts.waitForOtp();
+    // Hand control to the user. They log in and browse to their products; we
+    // just wait until they tell us they are done.
+    if (opts.waitForUser) await opts.waitForUser();
 
     await context.storageState({ path: config.storageStatePath });
+
+    const endpoints = inferEndpoints(capture.captures);
+    await saveDiscovery(capture.captures, endpoints);
 
     const session: Session = {
       method: "browser",
@@ -77,7 +85,7 @@ export async function browserLogin(
       createdAt: nowIso(),
     };
     await saveSession(session);
-    return session;
+    return { ...session, discovered: capture.captures.length };
   } finally {
     await browser.close();
   }

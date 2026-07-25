@@ -29,6 +29,7 @@
     "start": "bun run src/index.ts",
     "mcp": "bun run src/mcp/index.ts",
     "server": "bun run src/index.ts server",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "postinstall": "playwright install chromium || true"
   },

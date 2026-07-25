@@ -73,8 +73,25 @@ Two ways to establish a session — both act on your own account:
 
 | Mode | Command | When to use |
 |------|---------|-------------|
-| **Browser** | `bancolombia login` | Desktop / first login. Opens the real portal; you enter credentials and OTP yourself. Cookies are saved for reuse. |
-| **Headless** | `bancolombia connect <username> <pin> [api-url]` | Servers / CI, or an API proxy. Exchanges credentials for a bearer token. |
+| **Browser** | `bancolombia login` | Desktop / first login. Opens the **real** portal; you log in and open your accounts yourself. Cookies + the real data endpoints are captured for reuse. |
+| **Headless** | `bancolombia connect <username> <pin> [api-url]` | Servers / CI against an API proxy that speaks the `connect` contract. Exchanges credentials for a bearer token. |
+
+### How browser login learns the real endpoints
+
+Bancolombia's internal portal API is undocumented and changes over time, so this
+tool does **not** ship guessed URLs or form selectors. Instead, `bancolombia
+login`:
+
+1. Opens the real Sucursal Virtual Personas portal in a visible browser.
+2. You log in with your own credentials + OTP and open your accounts / movements.
+3. While you browse, the tool records the JSON API calls your session makes and
+   saves the discovered endpoints to `~/.bancolombia/endpoints.json` (raw samples
+   go to `captures.json` for debugging).
+4. Later, `accounts` / `transactions` (and the MCP tools) replay those endpoints
+   using your saved cookies, normalising the responses to a common shape.
+
+Your credentials are typed only into the real site — the tool never sees or
+stores them, only the resulting cookies and endpoint URLs.
 
 Your session is stored under `~/.bancolombia/` with `0600` permissions.
 **Credentials themselves are never written to disk** — only the resulting cookie
@@ -155,6 +172,7 @@ src/
   services/
     session.ts      Load/save/clear session (0600)
     auth.ts         browserLogin() (Playwright) + connect() (headless)
+    discovery.ts    Capture + infer real endpoints; normalise responses
     bancolombia.ts  Data access: accounts, balances, transactions, summary
   api/app.ts        Hono REST API
   mcp/index.ts      MCP server (6 tools)
@@ -167,6 +185,7 @@ src/
 ```bash
 bun install
 bun run typecheck          # tsc --noEmit
+bun test                   # unit tests (endpoint discovery + normalisers)
 bun run src/index.ts --help
 bun run src/mcp/index.ts   # start the MCP server directly
 ```

@@ -15,6 +15,11 @@ import { request as httpRequest } from "../http.ts";
 import { config } from "../config.ts";
 import { requireSession } from "./session.ts";
 import {
+  loadEndpoints,
+  normalizeAccounts,
+  normalizeTransactions,
+} from "./discovery.ts";
+import {
   AccountSchema,
   TransactionSchema,
   type Account,
@@ -35,48 +40,67 @@ const PATHS = {
 const AccountListSchema = z.array(AccountSchema);
 const TransactionListSchema = z.array(TransactionSchema);
 
-/** Perform a GET against the active session, regardless of provider. */
-async function get<T>(
-  session: Session,
-  path: string,
-  query?: Record<string, string>,
-): Promise<T> {
-  const qs = query ? `?${new URLSearchParams(query).toString()}` : "";
-
-  if (session.method === "connect") {
-    const base = (session.apiUrl ?? "").replace(/\/$/, "");
-    return httpRequest<T>(`${base}${path}${qs}`, { token: session.token });
-  }
-
-  // browser mode: reuse cookies via an authenticated Playwright request context.
+/** Fetch an absolute URL in browser mode, reusing the saved portal cookies. */
+async function browserGetJson(url: string): Promise<unknown> {
   const { request: pwRequest } = await import("playwright");
   const ctx = await pwRequest.newContext({
-    baseURL: config.portalUrl,
     storageState: config.storageStatePath,
   });
   try {
-    const res = await ctx.get(`${path}${qs}`);
+    const res = await ctx.get(url);
     if (!res.ok()) {
       throw new Error(
-        `Portal request failed (${res.status()} ${res.statusText()}) for ${path}`,
+        `Portal request failed (${res.status()} ${res.statusText()}) for ${url}`,
       );
     }
-    return (await res.json()) as T;
+    return await res.json();
   } finally {
     await ctx.dispose();
   }
 }
 
+/** GET a connect-mode proxy path with the bearer token. */
+async function connectGet<T>(
+  session: Session,
+  path: string,
+  query?: Record<string, string>,
+): Promise<T> {
+  const qs = query ? `?${new URLSearchParams(query).toString()}` : "";
+  const base = (session.apiUrl ?? "").replace(/\/$/, "");
+  return httpRequest<T>(`${base}${path}${qs}`, { token: session.token });
+}
+
+function noEndpointError(kind: "accounts" | "transactions"): Error {
+  return new Error(
+    `No ${kind} endpoint has been discovered yet. Run \`bancolombia login\`, ` +
+      `open your ${kind} in the browser so the session is captured, then retry.`,
+  );
+}
+
 export async function getAccounts(): Promise<Account[]> {
   const session = await requireSession();
-  const raw = await get<unknown>(session, PATHS.accounts);
-  return AccountListSchema.parse(raw);
+
+  if (session.method === "connect") {
+    return AccountListSchema.parse(await connectGet<unknown>(session, PATHS.accounts));
+  }
+
+  // browser mode: replay the endpoint discovered from the real portal session.
+  const endpoints = await loadEndpoints();
+  if (!endpoints?.accountsUrl) throw noEndpointError("accounts");
+  return normalizeAccounts(await browserGetJson(endpoints.accountsUrl));
 }
 
 export async function getBalance(accountId: string): Promise<Account> {
   const session = await requireSession();
-  const raw = await get<unknown>(session, PATHS.balance(accountId));
-  return AccountSchema.parse(raw);
+
+  if (session.method === "connect") {
+    return AccountSchema.parse(await connectGet<unknown>(session, PATHS.balance(accountId)));
+  }
+
+  // browser mode: no dedicated balance endpoint — derive it from the accounts list.
+  const account = (await getAccounts()).find((a) => a.id === accountId);
+  if (!account) throw new Error(`Account not found: ${accountId}`);
+  return account;
 }
 
 export async function getTransactions(
@@ -84,12 +108,25 @@ export async function getTransactions(
   range: DateRange,
 ): Promise<Transaction[]> {
   const session = await requireSession();
-  const raw = await get<unknown>(session, PATHS.transactions, {
+
+  if (session.method === "connect") {
+    return TransactionListSchema.parse(
+      await connectGet<unknown>(session, PATHS.transactions, {
+        accountId,
+        from: range.from,
+        to: range.to,
+      }),
+    );
+  }
+
+  // browser mode: replay the discovered transactions endpoint, filter by range.
+  const endpoints = await loadEndpoints();
+  if (!endpoints?.transactionsUrl) throw noEndpointError("transactions");
+  const all = normalizeTransactions(
+    await browserGetJson(endpoints.transactionsUrl),
     accountId,
-    from: range.from,
-    to: range.to,
-  });
-  return TransactionListSchema.parse(raw);
+  );
+  return all.filter((t) => t.date >= range.from && t.date <= range.to);
 }
 
 /** Aggregate view handy for a "financial advisor" summary. */
