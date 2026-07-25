@@ -171,6 +171,27 @@ bun run src/index.ts --help
 bun run src/mcp/index.ts   # start the MCP server directly
 ```
 
+### Try it without a real account
+
+A mock API proxy under [`examples/mock-proxy.ts`](./examples/mock-proxy.ts)
+implements the same contract as the headless `connect` flow and serves realistic
+fake data, so you can exercise the whole CLI / REST / MCP pipeline end-to-end:
+
+```bash
+# Terminal 1 — start the mock backend on :4599
+bun run examples/mock-proxy.ts
+
+# Terminal 2 — connect to it (any username / PIN is accepted) and query
+export BANCOLOMBIA_HOME=/tmp/bancolombia-demo      # keep it out of ~/.bancolombia
+bun run src/index.ts connect 1234567890 0000 http://localhost:4599
+bun run src/index.ts accounts
+bun run src/index.ts transactions ahorros-01 2026-07-01 2026-07-31
+```
+
+The same session is used by the MCP tools, so pointing Claude Desktop at
+`bun run src/mcp/index.ts` (with the same `BANCOLOMBIA_HOME`) lets you try the
+`get_accounts` / `get_transactions` tools against the mock too.
+
 ## Security notes
 
 - Credentials are entered by you (browser) or passed once to a proxy (headless)
