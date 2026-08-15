@@ -158,6 +158,16 @@ baloto
   });
 
 baloto
+  .command("pca")
+  .description("Principal components of the draws, and what actually predicts prize sharing")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("--histories <number>", "Fair machines simulated for the null spectrum", "200")
+  .action(async (opts: { game?: string; histories?: string }) => {
+    const { pcaCommand } = await import("./commands/baloto.ts");
+    await pcaCommand(opts);
+  });
+
+baloto
   .command("bias")
   .description("Estimate how players pick numbers, from published winner counts")
   .option("-g, --game <game>", "baloto or revancha", "baloto")

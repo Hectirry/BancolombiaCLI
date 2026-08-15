@@ -213,6 +213,7 @@ bancolombia baloto update --full --verify   # download + cross-check the history
 bancolombia baloto stats                    # is the machine fair?
 bancolombia baloto backtest                 # do the popular systems work?
 bancolombia baloto profile                  # real draws vs a simulated fair machine
+bancolombia baloto pca                      # principal components + what predicts sharing
 bancolombia baloto bias                     # how do players choose numbers?
 bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto pick -n 5                # combinations the crowd avoids
@@ -254,6 +255,38 @@ The same machinery feeds `pick --typical`, which keeps only combinations whose
 shape a fair machine produces routinely. That changes no probability whatsoever
 — it exists because a ticket reading `39 40 41 42 43` is hard to hand over, and
 a naturally-shaped alternative costs less than a percentage point of return.
+
+### Principal components, and the question they cannot answer
+
+`baloto pca` exists partly to draw a line. PCA is unsupervised: it finds
+directions of maximum variance and never sees an outcome, so it can never
+identify "the variables that influence winning". What it *can* do is say
+whether the draws contain latent structure at all — a hidden factor would carry
+more variance than chance allows.
+
+On the 952 × 43 matrix of which balls came out, the leading component carries
+**3.30 %** of the variance against **3.39 %** for a simulated fair machine, with
+a chance limit of 3.52 %. No component exceeds it. Note the comparison is
+against simulated spectra rather than a flat line: in any finite sample the
+first component is always the largest, which is exactly how a spurious "factor"
+gets reported.
+
+The supervised half of the same command asks a question that *does* have an
+answer, because it has a real response variable: the share of winners who
+matched three or more numbers. Regressed on the shape of the drawn combination
+across 695 draws, it explains **35.7 %** of the variation in how crowded the
+prizes are:
+
+| Property of the drawn numbers | Effect | t | Meaning |
+|---|---|---|---|
+| how many are ≤ 31 | **+0.264** | 4.67 | more people share it |
+| sum | −0.234 | −2.87 | fewer people share it |
+| spread | −0.148 | −3.96 | fewer people share it |
+| how many are even | −0.138 | −4.50 | fewer people share it |
+| biggest single-decade cluster | −0.105 | −3.14 | fewer people share it |
+
+Read the two halves together: nothing predicts *which* numbers come out;
+several things predict *how many people already had them*.
 
 ### How the player-preference model works
 
@@ -318,6 +351,7 @@ src/
     random.ts       Seeded RNG for the Monte Carlo null distributions
     stats.ts        Fairness tests against simulated fair histories
     profile.ts      Structural comparison of real draws vs a fair machine
+    pca.ts          Principal components + regression on prize crowding
     backtest.ts     Walk-forward scoring of hot/cold/due/birthday systems
     bias.ts         Player-preference model fitted to winner counts
     ev.ts           Pari-mutuel expected value, sharing and break-even

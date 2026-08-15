@@ -454,6 +454,100 @@ export async function profileCommand(opts: {
   }
 }
 
+export async function pcaCommand(opts: {
+  game?: string;
+  histories?: string;
+}): Promise<void> {
+  const dataset = await requireDataset();
+  const game = parseGame(opts.game);
+  const draws = drawsFor(dataset, game);
+  const histories = opts.histories ? Number.parseInt(opts.histories, 10) : 200;
+
+  const { comparePcaToFair, regressWinnerCrowding } = await import("../baloto/pca.ts");
+
+  console.log(c.bold("1. Principal components of the draws — is there latent structure?"));
+  console.log(
+    c.dim(
+      "  PCA on which balls came out in each of the " + draws.length + " draws.\n" +
+        "  A hidden factor would show up as a component carrying more variance than\n" +
+        "  chance allows — so each is compared against fair machines, not against a\n" +
+        "  flat line (in any finite sample the first component is always the largest).",
+    ),
+  );
+  console.log("");
+
+  const pca = comparePcaToFair(draws, histories);
+  console.log(
+    table(
+      ["COMPONENT", "REAL", "IF FAIR", "CHANCE LIMIT"],
+      pca.components.map((component) => [
+        `PC${component.index}`,
+        `${(component.observed * 100).toFixed(2)}%`,
+        `${(component.expected * 100).toFixed(2)}%`,
+        `${(component.upperBound * 100).toFixed(2)}%`,
+      ]),
+    ),
+  );
+  console.log("");
+  if (pca.structureFound === 0) {
+    console.log(
+      c.green("  No component carries more variance than a fair machine produces."),
+    );
+    console.log(
+      c.dim(
+        "  There is no latent factor to find, so there is nothing for a predictive\n" +
+          "  model to learn. PCA cannot say more than this: it never sees an outcome.",
+      ),
+    );
+  } else {
+    console.log(
+      c.yellow(`  ${pca.structureFound} component(s) exceed chance — worth investigating.`),
+    );
+  }
+
+  console.log("");
+  console.log(c.bold("2. What DOES have an answer: why some winning numbers are worth less"));
+  console.log(
+    c.dim(
+      "  Same draws, but now with a real response variable — the share of winners\n" +
+        "  who matched three or more numbers. It rises when the numbers that came out\n" +
+        "  were ones many players had already written down.",
+    ),
+  );
+  console.log("");
+
+  const regression = regressWinnerCrowding(draws);
+  if (regression.terms.length === 0) {
+    console.log(c.yellow("  Not enough published prize breakdowns for this regression."));
+    return;
+  }
+
+  console.log(
+    table(
+      ["PROPERTY", "EFFECT", "t", "READING"],
+      regression.terms.map((term) => [
+        term.name,
+        `${term.beta >= 0 ? "+" : ""}${term.beta.toFixed(3)}`,
+        term.tStatistic.toFixed(2),
+        term.significant
+          ? c.yellow(term.beta > 0 ? "more people share it" : "fewer people share it")
+          : c.dim("no clear effect"),
+      ]),
+    ),
+  );
+  console.log("");
+  console.log(
+    `  ${regression.observations} draws · the model explains ${c.bold(pct(regression.rSquared))} of how much prizes are shared.`,
+  );
+  console.log("");
+  console.log(
+    c.dim(
+      "  Read the two halves together: nothing predicts WHICH numbers come out,\n" +
+        "  but several things predict HOW MANY people already had them.",
+    ),
+  );
+}
+
 export async function pickCommand(opts: {
   game?: string;
   count?: string;
@@ -529,6 +623,7 @@ export async function summaryCommand(): Promise<void> {
   console.log(`  ${c.cyan("baloto stats")}     Test whether the machine is fair`);
   console.log(`  ${c.cyan("baloto backtest")}  Score hot/cold/due systems against chance`);
   console.log(`  ${c.cyan("baloto profile")}   Compare the real draws to a simulated fair machine`);
+  console.log(`  ${c.cyan("baloto pca")}       Principal components, and what predicts prize sharing`);
   console.log(`  ${c.cyan("baloto bias")}      Measure how players choose their numbers`);
   console.log(`  ${c.cyan("baloto ev")}        Price a ticket, with pari-mutuel splitting and tax`);
   console.log(`  ${c.cyan("baloto pick")}      Generate combinations the crowd avoids`);
