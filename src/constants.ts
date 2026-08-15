@@ -20,6 +20,8 @@ export const STORAGE_STATE_FILE = "storage-state.json";
 export const ENDPOINTS_FILE = "endpoints.json";
 /** Raw JSON API responses captured during discovery (for mapping/debugging). */
 export const CAPTURES_FILE = "captures.json";
+/** Historical Baloto draws and prize breakdowns used by `bancolombia baloto`. */
+export const BALOTO_DATASET_FILE = "baloto-draws.json";
 
 /**
  * Heuristics used to recognise data endpoints in captured network traffic.

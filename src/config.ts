@@ -6,6 +6,7 @@
 import { homedir } from "node:os";
 import { join, isAbsolute } from "node:path";
 import {
+  BALOTO_DATASET_FILE,
   CAPTURES_FILE,
   DEFAULT_API_PORT,
   DEFAULT_HOME_DIRNAME,
@@ -45,6 +46,7 @@ export const config = {
   storageStatePath: join(home, STORAGE_STATE_FILE),
   endpointsPath: join(home, ENDPOINTS_FILE),
   capturesPath: join(home, CAPTURES_FILE),
+  balotoDatasetPath: join(home, BALOTO_DATASET_FILE),
 
   /** Local REST API port for `bancolombia server`. */
   apiPort: envInt("BANCOLOMBIA_API_PORT", DEFAULT_API_PORT),

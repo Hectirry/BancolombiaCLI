@@ -120,6 +120,7 @@ bancolombia captures                                Show endpoints/data discover
 bancolombia logout                                  Clear the session
 bancolombia server [--port 3200]                    Start the local REST API
 bancolombia mcp                                     Start the MCP server (stdio)
+bancolombia baloto <subcommand>                     Statistical study of Baloto
 ```
 
 `transactions` fetches the **complete** history for the date range, not just the
@@ -194,6 +195,70 @@ stdio and exposes:
 | Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 | Linux | `~/.config/Claude/claude_desktop_config.json` |
 
+## Baloto: can statistics improve your odds?
+
+`bancolombia baloto` answers that question with the actual draw history rather
+than folklore. The short version:
+
+| Question | Answer |
+|----------|--------|
+| Can past results predict future ones? | **No.** Seven independent tests over 952 draws find nothing that distinguishes Baloto from a fair random machine. |
+| Do hot / cold / "due" systems work? | **No.** Backtested over 852 draws, every system lands within 1.3 σ of a random ticket. |
+| Is *anything* predictable? | **Yes — the players.** Numbers 1–31 appear on tickets ~1.36× as often as 32–43, and 7 is played 1.49× as often as an average number. |
+| Does that help? | **A little.** Every category is pari-mutuel, so an unpopular combination is shared with fewer winners. It raises the return per ticket by roughly 3.5 percentage points — it does not make Baloto profitable. |
+
+```bash
+bancolombia baloto update --full --verify   # download + cross-check the history
+bancolombia baloto stats                    # is the machine fair?
+bancolombia baloto backtest                 # do the popular systems work?
+bancolombia baloto bias                     # how do players choose numbers?
+bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
+bancolombia baloto pick -n 5                # combinations the crowd avoids
+```
+
+### Where the data comes from
+
+Two independently operated public archives are scraped. `update --verify`
+cross-checks one against the other: over 1 402 comparable draws they agree on
+all but three, and each of those three is a defect in the *secondary* archive
+(it repeats the Baloto Súper Balota on Revancha rows through parts of
+2021–2024, and swaps the two games on one 2025 date). Only draws from
+2018-01-03 onwards are kept — before that Baloto was a different game (six
+balls from 1–45) and mixing the two would corrupt every statistic.
+
+Two artefacts are removed automatically and disclosed in the output: a result
+the archive repeats one day later (Baloto is drawn Monday, Wednesday and
+Saturday, so two draws are never a day apart), and prize breakdowns whose
+columns do not multiply out — `prize per winner × winners = total paid` is
+checked on every row, which catches a 2021 page that renders one winner of
+$37 521 175 as 37 million winners.
+
+### How the player-preference model works
+
+Nobody publishes which combinations were bought, but the operator publishes
+**how many tickets won each category**. That is enough. A random player's ticket
+contains number *i* with probability π_i (Σπ = 5); treating the five slots as
+independent makes the number of matches against a drawn combination a
+Poisson-binomial, so the expected winners per category follow in closed form.
+Fitting π to ~700 published breakdowns recovers the crowd's preferences, and the
+unknown ticket volume drops out of the likelihood — so the estimate does not
+depend on guessing how many tickets were sold.
+
+Giving all 43 balls their own parameter *overfits*: it predicts unseen draws
+worse than assuming no bias at all. The model therefore estimates a handful of
+interpretable effects instead ("can this be a day of the month", "is it 7", a
+smooth drift from low to high), and `baloto bias` re-runs the held-out check
+every time so the claim is never taken on faith.
+
+### What "improving your odds" can and cannot mean
+
+Nothing changes your probability of winning: every combination is 1 in
+15 401 568 for the jackpot and 1 in 14.4 for any prize. What a player controls
+is *how many people share the prize when it lands*. At a $52 800 million
+jackpot, a typical birthday ticket returns about 63.8 % of its price; a
+combination the crowd avoids returns about 67.4 %. Both are losing bets — the
+break-even jackpot is roughly $87 000 million.
+
 ## Configuration
 
 All optional — see [`.env.example`](./.env.example). Notable variables:
@@ -223,6 +288,17 @@ src/
     bancolombia.ts  Data access: accounts, balances, transactions, summary
   api/app.ts        Hono REST API
   mcp/index.ts      MCP server (6 tools)
+  baloto/
+    rules.ts        Game format, prize categories, combinatorics, tax
+    source.ts       Scrapers for the two public result archives
+    dataset.ts      Local history: validation, de-duplication, checksums
+    update.ts       Two-pass ingestion (draws, then prize breakdowns)
+    random.ts       Seeded RNG for the Monte Carlo null distributions
+    stats.ts        Fairness tests against simulated fair histories
+    backtest.ts     Walk-forward scoring of hot/cold/due/birthday systems
+    bias.ts         Player-preference model fitted to winner counts
+    ev.ts           Pari-mutuel expected value, sharing and break-even
+    pick.ts         Generator for combinations the crowd avoids
   commands/         One file per CLI command
   ui/format.ts      Terminal tables & money formatting
 ```

@@ -107,6 +107,82 @@ program
     serverCommand(opts.port ? Number.parseInt(opts.port, 10) : undefined);
   });
 
+const baloto = program
+  .command("baloto")
+  .description("Statistical study of Colombia's Baloto lottery")
+  .action(async () => {
+    const { summaryCommand } = await import("./commands/baloto.ts");
+    await summaryCommand();
+  });
+
+baloto
+  .command("update")
+  .description("Download the draw history and per-draw prize breakdowns")
+  .option("--full", "Re-download every year instead of only recent ones")
+  .option("--no-prizes", "Skip the per-draw prize breakdown (far fewer requests)")
+  .option("--verify", "Cross-check the results against a second public archive")
+  .action(async (opts: { full?: boolean; prizes?: boolean; verify?: boolean }) => {
+    const { updateCommand } = await import("./commands/baloto.ts");
+    await updateCommand(opts);
+  });
+
+baloto
+  .command("stats")
+  .description("Test whether the draws deviate from a fair random machine")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("-s, --sims <number>", "Monte Carlo simulations per test", "5000")
+  .action(async (opts: { game?: string; sims?: string }) => {
+    const { statsCommand } = await import("./commands/baloto.ts");
+    await statsCommand(opts);
+  });
+
+baloto
+  .command("backtest")
+  .description("Score hot / cold / due / birthday systems against pure chance")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("-w, --window <number>", "Draws each system looks back over", "100")
+  .option("--warmup <number>", "Draws reserved before scoring starts", "100")
+  .action(async (opts: { game?: string; window?: string; warmup?: string }) => {
+    const { backtestCommand } = await import("./commands/baloto.ts");
+    await backtestCommand(opts);
+  });
+
+baloto
+  .command("bias")
+  .description("Estimate how players pick numbers, from published winner counts")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .action(async (opts: { game?: string }) => {
+    const { biasCommand } = await import("./commands/baloto.ts");
+    await biasCommand(opts);
+  });
+
+baloto
+  .command("ev")
+  .description("Expected value of a ticket, including prize splitting and tax")
+  .argument("[ticket]", 'Your numbers, e.g. "3,7,12,17,23+7"')
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("-j, --jackpot <cop>", "Advertised accumulated jackpot")
+  .option("-t, --tickets <number>", "Tickets sold in the draw")
+  .option("-p, --price <cop>", "Ticket price")
+  .option("--tax", "Apply the 20% withholding on prizes above 48 UVT")
+  .action(async (ticket: string | undefined, opts: Record<string, string | boolean>) => {
+    const { evCommand } = await import("./commands/baloto.ts");
+    await evCommand(ticket, opts as never);
+  });
+
+baloto
+  .command("pick")
+  .description("Generate combinations that few other players choose")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("-n, --count <number>", "How many tickets to generate", "5")
+  .option("-c, --contrarianism <number>", "How hard to lean against the crowd", "1.5")
+  .option("-j, --jackpot <cop>", "Jackpot to value the tickets at")
+  .option("--seed <number>", "Seed, for reproducible tickets")
+  .action(async (opts: Record<string, string>) => {
+    const { pickCommand } = await import("./commands/baloto.ts");
+    await pickCommand(opts as never);
+  });
+
 program
   .command("mcp")
   .description("Start the MCP server over stdio (for Claude Desktop)")
