@@ -195,7 +195,7 @@ baloto
   .description("Generate combinations that few other players choose")
   .option("-g, --game <game>", "baloto or revancha", "baloto")
   .option("-n, --count <number>", "How many tickets to generate", "5")
-  .option("-c, --contrarianism <number>", "How hard to lean against the crowd", "1.5")
+  .option("-p, --pool <number>", "Choose among the N least-played combinations", "400")
   .option("-j, --jackpot <cop>", "Jackpot to value the tickets at")
   .option("--typical", "Only combinations shaped like a plausible real result")
   .option("--seed <number>", "Seed, for reproducible tickets")

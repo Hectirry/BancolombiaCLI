@@ -279,11 +279,21 @@ prizes are:
 
 | Property of the drawn numbers | Effect | t | Meaning |
 |---|---|---|---|
-| how many are ≤ 31 | **+0.264** | 4.67 | more people share it |
-| sum | −0.234 | −2.87 | fewer people share it |
-| spread | −0.148 | −3.96 | fewer people share it |
-| how many are even | −0.138 | −4.50 | fewer people share it |
-| biggest single-decade cluster | −0.105 | −3.14 | fewer people share it |
+| how many are ≤ 31 | **+0.213** | 3.89 | more people share it |
+| tens-blocks touched | **+0.219** | 4.63 | more people share it |
+| sum | −0.386 | −7.14 | fewer people share it |
+| spread | −0.224 | −5.61 | fewer people share it |
+| how many are even | −0.140 | −4.63 | fewer people share it |
+| biggest single-decade cluster | +0.019 | 0.45 | no effect once decades is controlled for |
+
+That last row is a correction. An earlier specification omitted `decades` and
+reported `biggest-cluster` at −0.105 (t = −3.14), which reads as "players avoid
+clustered combinations". It does not survive: adding the number of tens-blocks
+touched collapses it to +0.019 (t = 0.45). The real variable is how widely the
+numbers are spread across the coupon, and `biggest-cluster` was proxying for it.
+The qualitative reading survives — players spread their picks out, so spread-out
+combinations are more crowded — but the coefficient that was quoted for it does
+not.
 
 Read the two halves together: nothing predicts *which* numbers come out;
 several things predict *how many people already had them*.

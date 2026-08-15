@@ -239,7 +239,7 @@ describe("pickTickets", () => {
   const model = fitBiasModel(biasedSeason(200), { iterations: 300 });
 
   test("produces valid, unpopular, well-spread tickets", () => {
-    const picks = pickTickets(model, { count: 4, candidates: 120, seed: 5, maxOverlap: 2 });
+    const picks = pickTickets(model, { count: 4, pool: 120, seed: 5, maxOverlap: 2 });
     expect(picks).toHaveLength(4);
     for (const { ticket, popularityRatio } of picks) {
       expect(ticket.main).toHaveLength(MAIN_PICK);
@@ -259,8 +259,8 @@ describe("pickTickets", () => {
   });
 
   test("the same seed gives the same tickets", () => {
-    const a = pickTickets(model, { count: 3, candidates: 60, seed: 99 });
-    const b = pickTickets(model, { count: 3, candidates: 60, seed: 99 });
+    const a = pickTickets(model, { count: 3, pool: 60, seed: 99 });
+    const b = pickTickets(model, { count: 3, pool: 60, seed: 99 });
     expect(a.map((t) => t.ticket)).toEqual(b.map((t) => t.ticket));
   });
 });

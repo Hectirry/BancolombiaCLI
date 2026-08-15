@@ -104,7 +104,7 @@ describe("typical combinations", () => {
 
     const picks = pickTickets(model, {
       count: 3,
-      candidates: 600,
+      pool: 600,
       typical: true,
       seed: 31,
     });

@@ -551,7 +551,7 @@ export async function pcaCommand(opts: {
 export async function pickCommand(opts: {
   game?: string;
   count?: string;
-  contrarianism?: string;
+  pool?: string;
   seed?: string;
   jackpot?: string;
   typical?: boolean;
@@ -561,12 +561,14 @@ export async function pickCommand(opts: {
   const summary = summariseBias(model);
 
   const count = opts.count ? Number.parseInt(opts.count, 10) : 5;
-  const tickets = pickTickets(model, {
+  const { pickReport } = await import("../baloto/pick.ts");
+  const report = pickReport(model, {
     count,
-    contrarianism: opts.contrarianism ? Number(opts.contrarianism) : 1.5,
+    pool: opts.pool ? Number.parseInt(opts.pool, 10) : 400,
     typical: opts.typical === true,
     seed: opts.seed ? Number.parseInt(opts.seed, 10) : undefined,
   });
+  const tickets = report.tickets;
 
   const jackpot = opts.jackpot
     ? Number(opts.jackpot.replace(/[^\d]/g, ""))
@@ -587,10 +589,23 @@ export async function pickCommand(opts: {
     return [
       `${t.ticket.main.map((n) => String(n).padStart(2, "0")).join(" ")}  +  ${String(t.ticket.super).padStart(2, "0")}`,
       `${t.popularityRatio.toFixed(2)}×`,
+      `#${t.rank}`,
       pct(ev.returnToPlayer),
     ];
   });
-  console.log(table(["NUMBERS", "POPULARITY", "RETURN"], rows));
+  console.log(table(["NUMBERS", "POPULARITY", "RANK", "RETURN"], rows));
+  console.log("");
+  console.log(
+    c.dim(
+      `  Chosen from the ${report.eligible.toLocaleString("es-CO")} least-played combinations that meet the
+` +
+        `  constraints; the very best of them is ${report.floor.toFixed(2)}×.` +
+        (opts.typical === true
+          ? ` Dropping the "looks plausible" rule
+  would reach ${report.unconstrainedFloor.toFixed(2)}× — that is what appearance costs.`
+          : ""),
+    ),
+  );
   console.log("");
 
   if (fitted) {

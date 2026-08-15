@@ -225,7 +225,12 @@ export interface WinnerRegression {
  */
 export function regressWinnerCrowding(
   draws: Draw[],
-  featureNames = ["date-range", "sum", "low-half", "evens", "spread", "biggest-cluster"],
+  // `low-half` is dropped as collinear with `date-range` (it never reached
+  // significance alongside it), and `decades` is included because leaving it
+  // out makes `biggest-cluster` look significant when it is only proxying for
+  // how many tens-blocks the numbers touch: adding it moves that coefficient
+  // from -0.105 (t = -3.14) to +0.019 (t = 0.44).
+  featureNames = ["date-range", "sum", "evens", "spread", "decades", "biggest-cluster"],
 ): WinnerRegression {
   const features = FEATURES.filter((f) => featureNames.includes(f.name));
 
