@@ -203,6 +203,7 @@ than folklore. The short version:
 | Question | Answer |
 |----------|--------|
 | Can past results predict future ones? | **No.** Seven independent tests over 952 draws find nothing that distinguishes Baloto from a fair random machine. |
+| Is there a hidden pattern in the shape of the results? | **No.** 19 structural properties — sum, spread, clustering, carry-over, parity, primes — compared against 200 000 simulated fair draws: not one deviates, before or after correcting for multiple comparisons. |
 | Do hot / cold / "due" systems work? | **No.** Backtested over 852 draws, every system lands within 1.3 σ of a random ticket. |
 | Is *anything* predictable? | **Yes — the players.** Numbers 1–31 appear on tickets ~1.36× as often as 32–43, and 7 is played 1.49× as often as an average number. |
 | Does that help? | **A little.** Every category is pari-mutuel, so an unpopular combination is shared with fewer winners. It raises the return per ticket by roughly 3.5 percentage points — it does not make Baloto profitable. |
@@ -211,6 +212,7 @@ than folklore. The short version:
 bancolombia baloto update --full --verify   # download + cross-check the history
 bancolombia baloto stats                    # is the machine fair?
 bancolombia baloto backtest                 # do the popular systems work?
+bancolombia baloto profile                  # real draws vs a simulated fair machine
 bancolombia baloto bias                     # how do players choose numbers?
 bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto pick -n 5                # combinations the crowd avoids
@@ -232,6 +234,26 @@ Saturday, so two draws are never a day apart), and prize breakdowns whose
 columns do not multiply out — `prize per winner × winners = total paid` is
 checked on every row, which catches a 2021 page that renders one winner of
 $37 521 175 as 37 million winners.
+
+### Looking for a pattern, properly
+
+`baloto profile` takes 19 structural properties of a result — the sum, how
+spread out the numbers are, how many share a tens-block, how many carried over
+from the previous draw, parity, primes, multiples of five, gaps — and compares
+each against 200 000 draws from a machine that is fair by construction. Each
+property is tested twice: once on its average, once on the shape of its whole
+distribution.
+
+That is 38 comparisons, and testing 38 things and reporting the best one is
+precisely how lottery "systems" get invented, so Holm's correction is applied
+across all of them. The result on the real data is that **nothing deviates** —
+not even before the correction. The largest discrepancy in the whole table is
+1.6 σ.
+
+The same machinery feeds `pick --typical`, which keeps only combinations whose
+shape a fair machine produces routinely. That changes no probability whatsoever
+— it exists because a ticket reading `39 40 41 42 43` is hard to hand over, and
+a naturally-shaped alternative costs less than a percentage point of return.
 
 ### How the player-preference model works
 
@@ -295,6 +317,7 @@ src/
     update.ts       Two-pass ingestion (draws, then prize breakdowns)
     random.ts       Seeded RNG for the Monte Carlo null distributions
     stats.ts        Fairness tests against simulated fair histories
+    profile.ts      Structural comparison of real draws vs a fair machine
     backtest.ts     Walk-forward scoring of hot/cold/due/birthday systems
     bias.ts         Player-preference model fitted to winner counts
     ev.ts           Pari-mutuel expected value, sharing and break-even

@@ -148,6 +148,16 @@ baloto
   });
 
 baloto
+  .command("profile")
+  .description("Compare every structural property of the draws to a fair machine")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("-s, --sims <number>", "Draws simulated from the fair machine", "200000")
+  .action(async (opts: { game?: string; sims?: string }) => {
+    const { profileCommand } = await import("./commands/baloto.ts");
+    await profileCommand(opts);
+  });
+
+baloto
   .command("bias")
   .description("Estimate how players pick numbers, from published winner counts")
   .option("-g, --game <game>", "baloto or revancha", "baloto")
@@ -177,6 +187,7 @@ baloto
   .option("-n, --count <number>", "How many tickets to generate", "5")
   .option("-c, --contrarianism <number>", "How hard to lean against the crowd", "1.5")
   .option("-j, --jackpot <cop>", "Jackpot to value the tickets at")
+  .option("--typical", "Only combinations shaped like a plausible real result")
   .option("--seed <number>", "Seed, for reproducible tickets")
   .action(async (opts: Record<string, string>) => {
     const { pickCommand } = await import("./commands/baloto.ts");

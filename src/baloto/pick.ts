@@ -16,6 +16,15 @@ import { MAIN_PICK, MAIN_POOL, SUPER_POOL } from "./rules.ts";
 import type { Combination } from "./rules.ts";
 import { ticketPopularity, type BiasModel } from "./bias.ts";
 import { makeRng, randInt } from "./random.ts";
+import { looksTypical, typicalRanges, type TypicalRange } from "./profile.ts";
+
+/**
+ * Structural properties kept inside the range a fair machine usually produces,
+ * so an unpopular ticket still looks like a plausible result. This costs
+ * nothing statistically — every combination is equally likely either way — but
+ * it matters to anyone who has to actually hand the ticket over.
+ */
+const TYPICAL_FEATURES = ["sum", "spread", "biggest-cluster", "decades", "min-gap"];
 
 export interface PickOptions {
   /** How many tickets to produce. */
@@ -30,6 +39,14 @@ export interface PickOptions {
   contrarianism?: number;
   /** Maximum numbers two returned tickets may share. */
   maxOverlap?: number;
+  /**
+   * Keep only combinations whose shape a fair machine produces routinely, so
+   * the ticket does not look constructed. Purely cosmetic — it cannot change
+   * any probability — but it costs very little popularity.
+   */
+  typical?: boolean;
+  /** Share of fair draws a "typical" combination must fall within. */
+  typicalCoverage?: number;
   seed?: number;
 }
 
@@ -79,8 +96,14 @@ export function pickTickets(model: BiasModel, options: PickOptions = {}): Picked
     candidates = 400,
     contrarianism = 1.5,
     maxOverlap = 2,
+    typical = false,
+    typicalCoverage = 0.8,
     seed = Date.now(),
   } = options;
+
+  const ranges: TypicalRange[] = typical
+    ? typicalRanges(TYPICAL_FEATURES, typicalCoverage)
+    : [];
 
   const rng = makeRng(seed >>> 0);
   const uniformMain = MAIN_PICK / MAIN_POOL;
@@ -102,6 +125,7 @@ export function pickTickets(model: BiasModel, options: PickOptions = {}): Picked
       // Keep the set of tickets spread out, so one unlucky number cannot sink
       // the whole batch.
       if (picked.some((p) => overlap(p.ticket.main, main) > maxOverlap)) continue;
+      if (typical && !looksTypical(main, superBall, ranges)) continue;
 
       const ratio = ticketPopularity(ticket, model) / uniformTicketOdds;
       if (!best || ratio < best.popularityRatio) best = { ticket, popularityRatio: ratio };

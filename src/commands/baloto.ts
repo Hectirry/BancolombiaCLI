@@ -380,12 +380,87 @@ export async function evCommand(
   );
 }
 
+export async function profileCommand(opts: {
+  game?: string;
+  sims?: string;
+}): Promise<void> {
+  const dataset = await requireDataset();
+  const game = parseGame(opts.game);
+  const draws = drawsFor(dataset, game);
+  const simulated = opts.sims ? Number.parseInt(opts.sims, 10) : 200_000;
+
+  const { profileDraws } = await import("../baloto/profile.ts");
+  const report = profileDraws(draws, simulated);
+
+  console.log(
+    c.bold(
+      `${report.draws} real draws vs ${report.simulatedDraws.toLocaleString("es-CO")} from a machine that is fair by construction`,
+    ),
+  );
+  console.log(
+    c.dim(
+      "  Every structural property someone might notice in a result, compared\n" +
+        "  against a simulated fair machine — on its average and on the shape of\n" +
+        "  its whole distribution.",
+    ),
+  );
+  console.log("");
+
+  console.log(
+    table(
+      ["PROPERTY", "REAL", "IF FAIR", "DIFF", "P (ADJ.)", "WHAT IT MEASURES"],
+      report.features.map((f) => [
+        f.name,
+        f.observed.toFixed(2),
+        f.expected.toFixed(2),
+        `${f.z >= 0 ? "+" : ""}${f.z.toFixed(2)} σ`,
+        f.adjustedPValue >= 0.999 ? "1.00" : f.adjustedPValue.toFixed(3),
+        c.dim(f.description),
+      ]),
+    ),
+  );
+  console.log("");
+  console.log(
+    c.dim(
+      `  ${report.features.length} properties × 2 tests each = ${report.features.length * 2} comparisons,\n` +
+        "  with Holm's correction applied so that testing many things at once cannot\n" +
+        "  manufacture a discovery.",
+    ),
+  );
+  console.log("");
+
+  if (report.patternsFound === 0) {
+    console.log(
+      c.green(
+        "No pattern. Every property of the real draws sits where a fair machine puts it.",
+      ),
+    );
+    if (report.falseLeads > 0) {
+      console.log(
+        c.dim(
+          `  ${report.falseLeads} would have looked like a finding at p < 0.05 without the correction —\n` +
+            "  which is exactly how lottery 'systems' get invented.",
+        ),
+      );
+    }
+  } else {
+    console.log(
+      c.yellow(
+        `${report.patternsFound} property still stands out after correction: ` +
+          report.features.filter((f) => f.significant).map((f) => f.name).join(", "),
+      ),
+    );
+    console.log(c.dim("  Worth re-running with a larger --sims before believing it."));
+  }
+}
+
 export async function pickCommand(opts: {
   game?: string;
   count?: string;
   contrarianism?: string;
   seed?: string;
   jackpot?: string;
+  typical?: boolean;
 }): Promise<void> {
   const game = parseGame(opts.game);
   const { model, fitted } = await loadBiasModel(game);
@@ -395,6 +470,7 @@ export async function pickCommand(opts: {
   const tickets = pickTickets(model, {
     count,
     contrarianism: opts.contrarianism ? Number(opts.contrarianism) : 1.5,
+    typical: opts.typical === true,
     seed: opts.seed ? Number.parseInt(opts.seed, 10) : undefined,
   });
 
@@ -452,6 +528,7 @@ export async function summaryCommand(): Promise<void> {
   console.log(`  ${c.cyan("baloto update")}    Download and cross-check the draw history`);
   console.log(`  ${c.cyan("baloto stats")}     Test whether the machine is fair`);
   console.log(`  ${c.cyan("baloto backtest")}  Score hot/cold/due systems against chance`);
+  console.log(`  ${c.cyan("baloto profile")}   Compare the real draws to a simulated fair machine`);
   console.log(`  ${c.cyan("baloto bias")}      Measure how players choose their numbers`);
   console.log(`  ${c.cyan("baloto ev")}        Price a ticket, with pari-mutuel splitting and tax`);
   console.log(`  ${c.cyan("baloto pick")}      Generate combinations the crowd avoids`);
