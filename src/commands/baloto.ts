@@ -454,6 +454,109 @@ export async function profileCommand(opts: {
   }
 }
 
+export async function physicalCommand(opts: {
+  game?: string;
+  windows?: string;
+  sims?: string;
+}): Promise<void> {
+  const dataset = await requireDataset();
+  const draws = drawsFor(dataset, parseGame(opts.game));
+  const windows = (opts.windows ?? "50,100,200")
+    .split(",")
+    .map((w) => Number.parseInt(w.trim(), 10))
+    .filter((w) => Number.isFinite(w) && w > 0);
+  const sims = opts.sims ? Number.parseInt(opts.sims, 10) : 300;
+
+  const { scanForLocalBias, biasPowerCurve, breakevenBias } = await import(
+    "../baloto/physical.ts"
+  );
+
+  console.log(c.bold("1. Is a ball running hot in some stretch of the history?"));
+  console.log(
+    c.dim(
+      "  Ball sets get rotated and retired, so a bias lasting a few months would\n" +
+        "  be averaged into invisibility across eight years. This scans every window\n" +
+        "  instead, and compares the largest deviation found against the largest a\n" +
+        "  fair machine produces under the same search.",
+    ),
+  );
+  console.log("");
+
+  const scan = scanForLocalBias(draws, windows, sims);
+  console.log(`  ${scan.comparisons.toLocaleString("es-CO")} window-and-ball combinations examined`);
+  console.log(`  largest deviation found:        ${scan.observedMaxZ.toFixed(2)} σ`);
+  console.log(`  a fair machine typically gives: ${scan.expectedMaxZ.toFixed(2)} σ`);
+  console.log(`  it exceeds ${scan.criticalMaxZ.toFixed(2)} σ only 5% of the time`);
+  console.log("");
+  if (scan.hottest) {
+    const hot = scan.hottest;
+    console.log(
+      `  Hottest stretch: ball ${c.bold(String(hot.number))} came up ${hot.count} times in the ` +
+        `${hot.windowSize} draws\n  between ${hot.from} and ${hot.to} — ${hot.expected.toFixed(1)} expected, ${hot.z.toFixed(2)} σ.`,
+    );
+    console.log(
+      c.dim(
+        "  This is what a biased ball would look like. Check whether it kept running\n" +
+          "  hot afterwards before believing it — a scan this wide always finds one.",
+      ),
+    );
+  }
+  console.log("");
+  console.log(
+    scan.biasFound
+      ? c.yellow("  A stretch exceeds what chance explains. Worth a closer look.")
+      : c.green("  Nothing exceeds chance — the real history is calmer than a fair machine."),
+  );
+
+  console.log("");
+  console.log(c.bold("2. How large would a bias have to be before this data could see it?"));
+  console.log(
+    c.dim(
+      "  A clean result is only worth as much as the test's power. This simulates\n" +
+        "  five genuinely heavy balls and asks how often the test notices.",
+    ),
+  );
+  console.log("");
+  const curve = biasPowerCurve(draws.length, [0.05, 0.1, 0.15, 0.2, 0.3, 0.5], Math.min(sims, 200));
+  console.log(
+    table(
+      ["BALL IS HEAVIER BY", "CHANCE OF NOTICING", "DEVIATION IT WOULD LEAVE"],
+      curve.map((point) => [
+        `+${(point.bias * 100).toFixed(0)}%`,
+        `${(point.detectionRate * 100).toFixed(0)}%`,
+        `${point.typicalZ.toFixed(2)} σ`,
+      ]),
+    ),
+  );
+
+  console.log("");
+  console.log(c.bold("3. And how large would it have to be to matter?"));
+  const { model } = await loadBiasModel(parseGame(opts.game));
+  const summary = summariseBias(model);
+  const reference = expectedValue({ main: [6, 23, 32, 37, 38], super: 2 }, model, {
+    jackpot: 53_200_000_000,
+    ticketsSold: Math.round(summary.medianTickets) || 300_000,
+    samples: 1200,
+  });
+  const jackpotPart = reference.tiers[0]!.contribution;
+  const rest = reference.expectedValue - jackpotPart;
+  const needed = breakevenBias(jackpotPart, rest, reference.ticketPrice);
+  console.log("");
+  console.log(
+    `  A ticket returns ${pct(reference.returnToPlayer)} today. Five balls would each have to be\n` +
+      `  ${c.bold(`${(needed * 100).toFixed(1)}% heavier`)} than they should be just to reach break-even.`,
+  );
+  console.log("");
+  console.log(
+    c.dim(
+      "  Read rows 2 and 3 together. A bias that size would be spotted only a few\n" +
+        "  percent of the time — so it cannot be ruled out. But it equally cannot be\n" +
+        "  located, and a bias you cannot attribute to specific balls is one you\n" +
+        "  cannot bet on. `baloto backtest` is the direct test of trying anyway.",
+    ),
+  );
+}
+
 export async function pcaCommand(opts: {
   game?: string;
   histories?: string;
@@ -640,6 +743,7 @@ export async function summaryCommand(): Promise<void> {
   console.log(`  ${c.cyan("baloto stats")}     Test whether the machine is fair`);
   console.log(`  ${c.cyan("baloto backtest")}  Score hot/cold/due systems against chance`);
   console.log(`  ${c.cyan("baloto profile")}   Compare the real draws to a simulated fair machine`);
+  console.log(`  ${c.cyan("baloto physical")}  Hunt for a biased ball, and measure the power to find one`);
   console.log(`  ${c.cyan("baloto pca")}       Principal components, and what predicts prize sharing`);
   console.log(`  ${c.cyan("baloto bias")}      Measure how players choose their numbers`);
   console.log(`  ${c.cyan("baloto ev")}        Price a ticket, with pari-mutuel splitting and tax`);

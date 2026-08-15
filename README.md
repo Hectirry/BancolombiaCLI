@@ -214,6 +214,7 @@ bancolombia baloto stats                    # is the machine fair?
 bancolombia baloto backtest                 # do the popular systems work?
 bancolombia baloto profile                  # real draws vs a simulated fair machine
 bancolombia baloto pca                      # principal components + what predicts sharing
+bancolombia baloto physical                 # hunt for a biased ball, and measure the power to find one
 bancolombia baloto bias                     # how do players choose numbers?
 bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto pick -n 5                # combinations the crowd avoids
@@ -255,6 +256,45 @@ The same machinery feeds `pick --typical`, which keeps only combinations whose
 shape a fair machine produces routinely. That changes no probability whatsoever
 — it exists because a ticket reading `39 40 41 42 43` is hard to hand over, and
 a naturally-shaped alternative costs less than a percentage point of return.
+
+### Do the balls "vibrate"? — the one folk theory that has ever worked
+
+Physical bias is not superstition: biased roulette wheels were profitably
+exploited in the 19th century, and gravity-pick lottery machines have been found
+off-balance often enough that operators now rotate certified ball sets and weigh
+them. `baloto physical` takes the idea seriously in two steps.
+
+**A bias that comes and goes.** Every other test here assumes a bias constant
+across all 952 draws — which would dilute a six-month problem into invisibility.
+The scan instead sweeps every window of 50, 100 and 200 draws, 107 887
+window-and-ball combinations, and compares the *largest* deviation found
+anywhere against the largest a fair machine produces under the same search. The
+real history reaches 3.61 σ; a fair machine typically reaches 4.48 σ and clears
+4.93 σ one time in twenty. The draws are calmer than chance.
+
+The hottest stretch it finds is instructive: ball 9 came up **14 times in the 50
+draws** between 2025-10-20 and 2026-02-11, against 5.8 expected — a 3.61 σ
+smoking gun. In the 78 draws since, it came up 9 times against 9.1 expected
+(−0.02 σ). And betting the hottest ball of the previous 50 draws, every draw for
+902 draws, hits 11.42 % of the time against 11.63 % expected by chance.
+
+**How big a bias could hide here.** A clean result is worth only as much as the
+test's power, so the second half simulates genuinely heavy balls:
+
+| Ball is heavier by | Chance of noticing |
+|---|---|
+| +5 % | 2 % |
+| +10 % | 5 % |
+| +20 % | 32 % |
+| +30 % | 74 % |
+| +50 % | 100 % |
+
+And the bias that would matter: five balls would each have to run **9.4 %**
+heavy just to bring a ticket to break-even. That sits at about a 5 % chance of
+detection — so a profitable bias genuinely cannot be ruled out with 952 draws.
+It equally cannot be *located*, and a bias you cannot attribute to specific
+balls is one you cannot bet on. `baloto backtest` is the direct test of trying
+anyway, and it comes back at −1.26 σ.
 
 ### Principal components, and the question they cannot answer
 
@@ -362,6 +402,7 @@ src/
     stats.ts        Fairness tests against simulated fair histories
     profile.ts      Structural comparison of real draws vs a fair machine
     pca.ts          Principal components + regression on prize crowding
+    physical.ts     Time-localised bias scan and detection-power curve
     backtest.ts     Walk-forward scoring of hot/cold/due/birthday systems
     bias.ts         Player-preference model fitted to winner counts
     ev.ts           Pari-mutuel expected value, sharing and break-even

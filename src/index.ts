@@ -158,6 +158,17 @@ baloto
   });
 
 baloto
+  .command("physical")
+  .description("Scan for a physically biased ball and report the power to detect one")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("-w, --windows <list>", "Comma-separated window sizes to scan", "50,100,200")
+  .option("-s, --sims <number>", "Fair machines simulated for the null", "300")
+  .action(async (opts: { game?: string; windows?: string; sims?: string }) => {
+    const { physicalCommand } = await import("./commands/baloto.ts");
+    await physicalCommand(opts);
+  });
+
+baloto
   .command("pca")
   .description("Principal components of the draws, and what actually predicts prize sharing")
   .option("-g, --game <game>", "baloto or revancha", "baloto")
