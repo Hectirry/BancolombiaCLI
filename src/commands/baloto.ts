@@ -555,6 +555,7 @@ export async function pickCommand(opts: {
   seed?: string;
   jackpot?: string;
   typical?: boolean;
+  coverage?: string;
 }): Promise<void> {
   const game = parseGame(opts.game);
   const { model, fitted } = await loadBiasModel(game);
@@ -566,6 +567,7 @@ export async function pickCommand(opts: {
     count,
     pool: opts.pool ? Number.parseInt(opts.pool, 10) : 400,
     typical: opts.typical === true,
+    typicalCoverage: opts.coverage ? Number(opts.coverage) : 0.8,
     seed: opts.seed ? Number.parseInt(opts.seed, 10) : undefined,
   });
   const tickets = report.tickets;

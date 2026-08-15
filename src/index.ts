@@ -198,6 +198,7 @@ baloto
   .option("-p, --pool <number>", "Choose among the N least-played combinations", "400")
   .option("-j, --jackpot <cop>", "Jackpot to value the tickets at")
   .option("--typical", "Only combinations shaped like a plausible real result")
+  .option("--coverage <fraction>", "How strictly 'typical' is read: 0.5 = the interquartile range of real draws, 0.8 = looser", "0.8")
   .option("--seed <number>", "Seed, for reproducible tickets")
   .action(async (opts: Record<string, string>) => {
     const { pickCommand } = await import("./commands/baloto.ts");
