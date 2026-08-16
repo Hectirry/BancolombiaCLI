@@ -169,6 +169,16 @@ baloto
   });
 
 baloto
+  .command("chaos")
+  .description("Twin-simulate the ball chamber and measure how fast prediction dies")
+  .option("-e, --epsilon <metres>", "Initial perturbation of one ball", "1e-9")
+  .option("-d, --duration <seconds>", "Simulated seconds after the perturbation", "3")
+  .action(async (opts: { epsilon?: string; duration?: string }) => {
+    const { chaosCommand } = await import("./commands/baloto.ts");
+    await chaosCommand(opts);
+  });
+
+baloto
   .command("pca")
   .description("Principal components of the draws, and what actually predicts prize sharing")
   .option("-g, --game <game>", "baloto or revancha", "baloto")

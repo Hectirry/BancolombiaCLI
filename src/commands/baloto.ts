@@ -557,6 +557,77 @@ export async function physicalCommand(opts: {
   );
 }
 
+export async function chaosCommand(opts: {
+  epsilon?: string;
+  duration?: string;
+}): Promise<void> {
+  const { DEFAULT_CHAMBER, measureLyapunov, predictabilityHorizons } = await import(
+    "../baloto/chaos.ts"
+  );
+  const epsilon = opts.epsilon ? Number(opts.epsilon) : 1e-9;
+  const duration = opts.duration ? Number(opts.duration) : 3;
+
+  console.log(c.bold("Could the machine be simulated? The twin experiment"));
+  console.log(
+    c.dim(
+      "  Two identical, fully deterministic simulations of the ball chamber —\n" +
+        `  ${DEFAULT_CHAMBER.balls} balls, gravity, an air jet, elastic collisions — with a single\n` +
+        `  ball displaced by ${epsilon.toExponential(0)} metres in one of them.`,
+    ),
+  );
+  console.log("");
+
+  const report = measureLyapunov(DEFAULT_CHAMBER, epsilon, duration);
+  console.log(`  collisions per ball per second: ${report.collisionRate.toFixed(0)}`);
+  console.log(
+    `  Lyapunov exponent λ = ${c.bold(report.lambda.toFixed(1))} per second — the error ` +
+      `${c.bold(`doubles every ${(report.doublingTime * 1000).toFixed(0)} ms`)}.`,
+  );
+
+  const landmarks = report.trace.filter(
+    (point, i) => i > 0 && i % Math.max(1, Math.floor(report.trace.length / 6)) === 0,
+  );
+  console.log("");
+  console.log(
+    table(
+      ["TIME", "SEPARATION BETWEEN THE TWINS"],
+      landmarks.map((point) => [
+        `${point.t.toFixed(2)} s`,
+        point.separation < 1e-3
+          ? `${point.separation.toExponential(1)} m`
+          : c.yellow(`${point.separation.toFixed(2)} m — fully decorrelated`),
+      ]),
+    ),
+  );
+
+  console.log("");
+  console.log(c.bold("How long a prediction survives"));
+  console.log(
+    c.dim("  Foresight ends when the amplified error fills the chamber: t = ln(L/δ)/λ."),
+  );
+  console.log("");
+  console.log(
+    table(
+      ["IF THE START WERE KNOWN TO…", "PREDICTION SURVIVES"],
+      predictabilityHorizons(report.lambda).map((row) => [
+        row.label,
+        `${row.horizon.toFixed(2)} s`,
+      ]),
+    ),
+  );
+
+  console.log("");
+  console.log(
+    c.yellow(
+      "  A real draw mixes the balls for tens of seconds. Even knowledge at the\n" +
+        "  Planck length — beyond which position has no physical meaning — buys a\n" +
+        "  second or two. This is why roulette was beatable (a few bounces) and a\n" +
+        "  lottery machine is not (thousands of collisions): the machine is not\n" +
+        "  merely hard to simulate, it is an entropy generator by design.",
+    ),
+  );
+}
+
 export async function pcaCommand(opts: {
   game?: string;
   histories?: string;
@@ -744,6 +815,7 @@ export async function summaryCommand(): Promise<void> {
   console.log(`  ${c.cyan("baloto backtest")}  Score hot/cold/due systems against chance`);
   console.log(`  ${c.cyan("baloto profile")}   Compare the real draws to a simulated fair machine`);
   console.log(`  ${c.cyan("baloto physical")}  Hunt for a biased ball, and measure the power to find one`);
+  console.log(`  ${c.cyan("baloto chaos")}     Simulate the chamber itself and measure its predictability`);
   console.log(`  ${c.cyan("baloto pca")}       Principal components, and what predicts prize sharing`);
   console.log(`  ${c.cyan("baloto bias")}      Measure how players choose their numbers`);
   console.log(`  ${c.cyan("baloto ev")}        Price a ticket, with pari-mutuel splitting and tax`);

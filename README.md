@@ -215,6 +215,7 @@ bancolombia baloto backtest                 # do the popular systems work?
 bancolombia baloto profile                  # real draws vs a simulated fair machine
 bancolombia baloto pca                      # principal components + what predicts sharing
 bancolombia baloto physical                 # hunt for a biased ball, and measure the power to find one
+bancolombia baloto chaos                    # twin-simulate the chamber; measure how fast prediction dies
 bancolombia baloto bias                     # how do players choose numbers?
 bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto pick -n 5                # combinations the crowd avoids
@@ -329,6 +330,48 @@ It equally cannot be *located*, and a bias you cannot attribute to specific
 balls is one you cannot bet on. `baloto backtest` is the direct test of trying
 anyway, and it comes back at −1.26 σ.
 
+### Simulating the machine itself — the attack that beat roulette
+
+The most physically serious proposal is also historically credible: the balls
+obey Newtonian mechanics in a controlled chamber, so simulate it. Thorp and
+Shannon's wearable computer beat roulette exactly this way in 1961, and the
+Eudaemons made it pay in the late 1970s.
+
+`baloto chaos` answers with a measurement instead of an appeal to randomness.
+It runs two bit-identical, fully deterministic simulations of the chamber —
+43 balls, gravity, an air jet, elastic collisions — differing by **one
+nanometre** in a single ball's position, and watches them diverge:
+
+| Time | Separation between the twins |
+|---|---|
+| 0.0 s | 10⁻⁹ m |
+| 0.2 s | 5×10⁻⁶ m |
+| 0.4 s | 0.34 m |
+| 0.5 s+ | fully decorrelated |
+
+The fitted Lyapunov exponent is **λ ≈ 54 per second**: the error doubles every
+13 ms (robust across perturbation sizes 10⁻¹² to 10⁻⁶ and across seeds).
+Foresight ends when the amplified error fills the chamber, t = ln(L/δ)/λ, which
+makes precision almost worthless — it only buys time logarithmically:
+
+| Initial state known to… | Prediction survives |
+|---|---|
+| a millimetre (naked eye) | 0.11 s |
+| a micron (microscope) | 0.24 s |
+| an atom's width | 0.41 s |
+| **the Planck length (physical limit)** | **1.46 s** |
+
+A real draw mixes the balls for tens of seconds. This is the quantitative
+difference between roulette and a lottery machine: a roulette ball undergoes a
+handful of chaotic bounces (foresight of seconds is achievable and was
+achieved); a lottery ball undergoes ~21 collisions per second for the whole
+mixing cycle. And beyond the initial conditions, the real chamber is not even
+isolated — every ball takes ~10²³ air-molecule impacts per second, injecting
+fresh uncertainty far above the Planck scale continuously. The machine is not
+hard to simulate; it is an entropy generator, and the mixing time is the
+design parameter that makes it one. This is *why* the draws pass every
+statistical test in this repo.
+
 ### Principal components, and the question they cannot answer
 
 `baloto pca` exists partly to draw a line. PCA is unsupervised: it finds
@@ -439,6 +482,7 @@ src/
     profile.ts      Structural comparison of real draws vs a fair machine
     pca.ts          Principal components + regression on prize crowding
     physical.ts     Time-localised bias scan and detection-power curve
+    chaos.ts        Deterministic chamber simulation and Lyapunov measurement
     backtest.ts     Walk-forward scoring of hot/cold/due/birthday systems
     bias.ts         Player-preference model fitted to winner counts
     ev.ts           Pari-mutuel expected value, sharing and break-even
