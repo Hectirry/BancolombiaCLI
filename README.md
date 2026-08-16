@@ -221,6 +221,30 @@ bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto pick -n 5                # combinations the crowd avoids
 ```
 
+### The official regulation, verified at the source
+
+The game is governed by Coljuegos acuerdos published as PDFs on baloto.com
+(`static.baloto.com/static/docs/acuerdo-*.pdf`). The constants in `rules.ts`
+now carry the regulation's exact values rather than press figures:
+
+- **Prize plan** (Acuerdo 03 de 2021, art. 2.5.1): 36,744 % / 2,395 % /
+  0,480 % / 0,525 % / 0,455 % / 1,485 % / 1,186 % / 6,730 % of gross sales —
+  summing to exactly the 50 % return the regulation guarantees. Category 8 is
+  officially "match the second-set number" with at most one main match, paying
+  back the bet VAT included.
+- **The jackpot grows slower than its headline share.** Of the 36,744 %
+  assigned to the first category, only 34,244 % reaches the pot while the
+  cumulative fall probability is under 40 %, and **32 %** once it passes 40 %
+  (the regulation prescribes the same PAcum product formula this repo uses).
+  The difference feeds a prize-reserve fund capped at $8.000 millones. A long
+  roll-over is in the 32 % regime almost throughout — the EV model and the
+  when-will-it-fall simulation use the effective rate.
+- **Prices** (Acuerdo 02 de 2025, 28 April 2025): the Baloto bet rose from
+  $5.700 to $6.000 and Revancha from $2.100 to **$3.000**, VAT included; the
+  same acuerdo approved the additional Monday draw whose lower sales the
+  dataset independently detects (~125k tickets vs ~360k on Saturdays).
+- **Minimum jackpot**: $4.000 millones (art. 2.5.1, parágrafo 6).
+
 ### Where the data comes from
 
 Two independently operated public archives are scraped. `update --verify`

@@ -79,27 +79,53 @@ export interface PrizeTier {
   superMatch: boolean;
   kind: PrizeKind;
   /**
-   * Share of ticket sales allocated to this tier, as published in the game's
-   * prize plan. `calibrateAllocations` in `bias.ts` re-estimates these from the
-   * observed payouts, so treat them as a prior rather than gospel.
+   * Share of gross sales allocated to this tier under the official prize plan
+   * (Coljuegos, Acuerdo 03 de 2021, art. 2.5.1). The eight categories sum to
+   * exactly the 50 % of gross income the regulation guarantees as return.
    */
   allocation: number;
 }
 
 /**
- * The eight prize categories, most valuable first. Category 8 groups "1 acierto
- * + Súper Balota" with "sólo Súper Balota" and refunds the ticket price.
+ * The eight prize categories, most valuable first, with the allocations set by
+ * Coljuegos in Acuerdo 03 de 2021, art. 2.5.1 (verbatim percentages of gross
+ * sales). Category 8 is defined in the regulation as matching the second-set
+ * number — the Súper Balota — with at most one main match (two or more main
+ * matches promote the ticket to category 7), and refunds the bet including VAT.
  */
 export const PRIZE_TIERS: PrizeTier[] = [
-  { id: "5+S", label: "5 aciertos + Súper Balota", minMain: 5, maxMain: 5, superMatch: true, kind: "jackpot", allocation: 0.3674 },
-  { id: "5", label: "5 aciertos", minMain: 5, maxMain: 5, superMatch: false, kind: "parimutuel", allocation: 0.0239 },
+  { id: "5+S", label: "5 aciertos + Súper Balota", minMain: 5, maxMain: 5, superMatch: true, kind: "jackpot", allocation: 0.36744 },
+  { id: "5", label: "5 aciertos", minMain: 5, maxMain: 5, superMatch: false, kind: "parimutuel", allocation: 0.02395 },
   { id: "4+S", label: "4 aciertos + Súper Balota", minMain: 4, maxMain: 4, superMatch: true, kind: "parimutuel", allocation: 0.0048 },
-  { id: "4", label: "4 aciertos", minMain: 4, maxMain: 4, superMatch: false, kind: "parimutuel", allocation: 0.0052 },
-  { id: "3+S", label: "3 aciertos + Súper Balota", minMain: 3, maxMain: 3, superMatch: true, kind: "parimutuel", allocation: 0.0045 },
-  { id: "3", label: "3 aciertos", minMain: 3, maxMain: 3, superMatch: false, kind: "parimutuel", allocation: 0.0148 },
-  { id: "2+S", label: "2 aciertos + Súper Balota", minMain: 2, maxMain: 2, superMatch: true, kind: "parimutuel", allocation: 0.0118 },
+  { id: "4", label: "4 aciertos", minMain: 4, maxMain: 4, superMatch: false, kind: "parimutuel", allocation: 0.00525 },
+  { id: "3+S", label: "3 aciertos + Súper Balota", minMain: 3, maxMain: 3, superMatch: true, kind: "parimutuel", allocation: 0.00455 },
+  { id: "3", label: "3 aciertos", minMain: 3, maxMain: 3, superMatch: false, kind: "parimutuel", allocation: 0.01485 },
+  { id: "2+S", label: "2 aciertos + Súper Balota", minMain: 2, maxMain: 2, superMatch: true, kind: "parimutuel", allocation: 0.01186 },
   { id: "1+S", label: "1 ó 0 aciertos + Súper Balota", minMain: 0, maxMain: 1, superMatch: true, kind: "fixed", allocation: 0.0673 },
 ];
+
+/**
+ * How the jackpot actually grows (Acuerdo 03 de 2021, art. 2.5.1, numeral 1).
+ *
+ * The 36,744 % assigned to the first category is NOT what reaches the pot each
+ * draw. While the cumulative probability that the jackpot has fallen — the
+ * regulation prescribes the same PAcum product formula this repo uses — is
+ * below 40 %, the pot accrues 34,244 % of sales; once PAcum reaches 40 % it
+ * accrues 32 %. The difference (2,50 % or 4,744 %) feeds a prize-reserve fund
+ * until that fund holds $8.000.000.000, after which it accrues to the jackpot
+ * again. A long roll-over such as the current one is therefore in the 32 %
+ * regime almost throughout.
+ */
+export const JACKPOT_ACCRUAL = {
+  /** Share of sales reaching the pot while PAcum(fall) < 40 %. */
+  early: 0.34244,
+  /** Share of sales reaching the pot once PAcum(fall) ≥ 40 %. */
+  late: 0.32,
+  /** PAcum threshold separating the two regimes. */
+  threshold: 0.4,
+  /** Cap of the prize-reserve fund that absorbs the difference. */
+  reserveCap: 8_000_000_000,
+} as const;
 
 export const TIER_BY_ID: Record<string, PrizeTier> = Object.fromEntries(
   PRIZE_TIERS.map((t) => [t.id, t]),
@@ -133,14 +159,17 @@ export function classify(ticket: Combination, drawn: Combination): PrizeTier | n
 }
 
 /**
- * Commercial parameters. Prices include VAT and are the ones advertised by the
- * operator in 2025–2026; override them on the CLI if they move.
+ * Commercial parameters, VAT included, as approved by Coljuegos in Acuerdo 02
+ * de 2025 (28 April 2025): the Baloto bet moved from $5.700 to $6.000 and
+ * Revancha from $2.100 to $3.000. The same acuerdo approved the additional
+ * Monday draw. The minimum guaranteed jackpot is set by Acuerdo 03 de 2021,
+ * art. 2.5.1, parágrafo 6.
  */
 export const ECONOMICS = {
   /** Price of one Baloto ticket, in COP. */
   ticketPrice: 6_000,
   /** Extra cost of adding Revancha to the same ticket, in COP. */
-  revanchaPrice: 2_100,
+  revanchaPrice: 3_000,
   /** Minimum guaranteed jackpot, in COP. */
   minimumJackpot: 4_000_000_000,
 } as const;

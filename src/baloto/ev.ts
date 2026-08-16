@@ -17,6 +17,7 @@
 
 import {
   ECONOMICS,
+  JACKPOT_ACCRUAL,
   MAIN_PICK,
   MAIN_POOL,
   PRIZE_TIERS,
@@ -188,7 +189,10 @@ export function expectedValue(
 
     if (tier.kind === "jackpot") {
       const share = expectedShare(Math.max(0, ticketsSold - 1), q);
-      const pot = jackpot + tier.allocation * sales;
+      // The pot receives the regulation's effective accrual, not the nominal
+      // 36,744 % — on a long roll-over (any jackpot worth valuing) PAcum has
+      // long passed 40 %, so the applicable rate is 32 % (Acuerdo 03/2021).
+      const pot = jackpot + JACKPOT_ACCRUAL.late * sales;
       const contribution = probability * net(pot * share);
       // Keep the slope in J so the break-even jackpot can be solved directly.
       jackpotSlope = probability * share * (applyTax ? 1 - 0.2 : 1);
