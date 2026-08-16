@@ -172,7 +172,23 @@ export const ECONOMICS = {
   revanchaPrice: 3_000,
   /** Minimum guaranteed jackpot, in COP. */
   minimumJackpot: 4_000_000_000,
+  /**
+   * Colombian VAT on games of chance. The regulation's "ingresos brutos" — the
+   * base every prize allocation applies to — is the bet NET of this tax. Not a
+   * legal reading but a measurement: dividing each draw's published pool
+   * (total paid / allocation) by the winner-implied ticket count yields
+   * $5.042 per ticket after mid-2025 and $4.790 before — precisely
+   * $6.000/1,19 and $5.700/1,19. Ignoring it overstated every pot by 19 %:
+   * payout predictions missed by 18,0 % median, and expected jackpot falls
+   * came to 11,8 against 14 observed. With it: 5,7 %, and 14,1.
+   */
+  vat: 0.19,
 } as const;
+
+/** Revenue per ticket that actually feeds the prize pools (VAT stripped). */
+export function netTicketRevenue(price: number = ECONOMICS.ticketPrice): number {
+  return price / (1 + ECONOMICS.vat);
+}
 
 /**
  * Colombian withholding on lottery prizes: 20 % (art. 404-1 ET) on any single

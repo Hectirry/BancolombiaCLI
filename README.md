@@ -221,6 +221,26 @@ bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto pick -n 5                # combinations the crowd avoids
 ```
 
+### The backtest that found a 19 % error: prizes are funded net of VAT
+
+With the official allocations in hand, the money side becomes checkable: each
+tier's published pool divided by its allocation is that draw's gross revenue,
+and dividing by the winner-implied ticket count yields the revenue **per
+ticket**. Across 695 draws that number is $4.790–4.858 before mid-2025 and
+$5.072 after — which is $5.700/1,19 and $6.000/1,19. The regulation's
+"ingresos brutos" is the bet net of the 19 % VAT, and the model had been
+overstating every pool by that factor. Two backtests confirm the correction:
+
+| Metric | before | after |
+|---|---|---|
+| Median error predicting each tier's payout per winner (2 780 tier-draws) | 18.0 % | **5.7 %** |
+| Expected jackpot falls across 695 draws (14 observed) | 11.8 | **14.1** |
+
+The corrected economics move the headline figures modestly: an unpopular
+ticket returns ~68 % (was ~69–71 %), the break-even jackpot is ~$83 000 M, and
+the chance the rolling jackpot crosses break-even before falling drops to
+~32 %.
+
 ### The official regulation, verified at the source
 
 The game is governed by Coljuegos acuerdos published as PDFs on baloto.com

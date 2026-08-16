@@ -18,6 +18,7 @@
 import {
   ECONOMICS,
   JACKPOT_ACCRUAL,
+  netTicketRevenue,
   MAIN_PICK,
   MAIN_POOL,
   PRIZE_TIERS,
@@ -160,7 +161,9 @@ export function expectedValue(
   } = options;
 
   const rng = makeRng(seed);
-  const sales = ticketsSold * ticketPrice;
+  // Prize pools are funded from VAT-net revenue — the backtested reading of
+  // the regulation's "ingresos brutos" (see ECONOMICS.vat).
+  const sales = ticketsSold * netTicketRevenue(ticketPrice);
   const net = (prize: number) => (applyTax ? afterTax(prize) : prize);
 
   const q = ticketPopularity(ticket, model);
