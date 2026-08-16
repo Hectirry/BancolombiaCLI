@@ -113,6 +113,43 @@ export interface BiasModel {
   nullLogLikelihood: number;
 }
 
+/**
+ * Exact distribution of how many of `drawn` appear on a random player's ticket.
+ *
+ * A ticket holds exactly five numbers, so the five slots are *not* independent:
+ * sampling without replacement has less spread than independent trials. An
+ * earlier version used a Poisson-binomial here, and it over-predicted the
+ * high-match categories by a factor of nineteen at the top — precisely the tail
+ * the independence assumption inflates.
+ *
+ * Under weighted sampling of five numbers without replacement, the probability
+ * of matching exactly k of the drawn balls is a ratio of elementary symmetric
+ * polynomials: choose k from the drawn weights, the rest from the others.
+ */
+export function matchDistribution(drawnWeights: number[], otherWeights: number[]): number[] {
+  const inside = elementarySymmetricAll(drawnWeights, MAIN_PICK);
+  const outside = elementarySymmetricAll(otherWeights, MAIN_PICK);
+  const dist = new Array(MAIN_PICK + 1).fill(0);
+  let total = 0;
+  for (let k = 0; k <= MAIN_PICK; k++) {
+    dist[k] = (inside[k] ?? 0) * (outside[MAIN_PICK - k] ?? 0);
+    total += dist[k]!;
+  }
+  if (total <= 0) return dist;
+  for (let k = 0; k <= MAIN_PICK; k++) dist[k]! /= total;
+  return dist;
+}
+
+/** All elementary symmetric polynomials e_0..e_k of `weights`. */
+export function elementarySymmetricAll(weights: number[], k: number): number[] {
+  const e = new Array(k + 1).fill(0);
+  e[0] = 1;
+  for (const w of weights) {
+    for (let j = Math.min(k, e.length - 1); j >= 1; j--) e[j] = e[j]! + e[j - 1]! * w;
+  }
+  return e;
+}
+
 /** Poisson-binomial distribution of the number of successes among `probs`. */
 export function poissonBinomial(probs: number[]): number[] {
   const dist = new Array(probs.length + 1).fill(0);
@@ -172,13 +209,58 @@ function toObservations(draws: Draw[]): Observation[] {
   return out;
 }
 
+/**
+ * Sampling weights and their symmetric polynomials, computed once per candidate
+ * model rather than once per draw — the likelihood is evaluated tens of
+ * thousands of times during a fit, so this is the difference between a second
+ * and a minute.
+ */
+interface WeightContext {
+  weights: number[];
+  /** e_0..e_5 over all 43 balls. */
+  full: number[];
+}
+
+function weightContext(pi: number[]): WeightContext {
+  const weights = pi.map((p) => p / (1 - p));
+  return { weights, full: elementarySymmetricAll(weights, MAIN_PICK) };
+}
+
+/**
+ * e_0..e_5 over every ball except the five drawn ones, by deflating the drawn
+ * factors out of the full polynomial: if E = Q·(1 + w·x) then q_j = e_j − w·q_{j−1}.
+ */
+function excludeDrawn(context: WeightContext, drawn: number[]): number[] {
+  let e = context.full;
+  for (const index of drawn) {
+    const w = context.weights[index]!;
+    const q = new Array(MAIN_PICK + 1).fill(0);
+    q[0] = e[0]!;
+    for (let j = 1; j <= MAIN_PICK; j++) q[j] = e[j]! - w * q[j - 1]!;
+    e = q;
+  }
+  return e;
+}
+
 /** Tier probabilities for one draw given the current π and σ. */
 function tierProbabilities(
   obs: Observation,
   pi: number[],
   sigma: number[],
+  context: WeightContext = weightContext(pi),
 ): { probs: number[]; pb: number[]; sigmaHit: number } {
-  const pb = poissonBinomial(obs.drawn.map((i) => pi[i]!));
+  const inside = elementarySymmetricAll(
+    obs.drawn.map((i) => context.weights[i]!),
+    MAIN_PICK,
+  );
+  const outside = excludeDrawn(context, obs.drawn);
+  const pb = new Array(MAIN_PICK + 1).fill(0);
+  let total = 0;
+  for (let k = 0; k <= MAIN_PICK; k++) {
+    pb[k] = Math.max(0, inside[k]! * outside[MAIN_PICK - k]!);
+    total += pb[k]!;
+  }
+  if (total > 0) for (let k = 0; k <= MAIN_PICK; k++) pb[k]! /= total;
   const sigmaHit = sigma[obs.superIndex]!;
   const probs = PRIZE_TIERS.map((tier) => {
     let mass = 0;
@@ -193,9 +275,10 @@ function tierProbabilities(
  * number of tickets sold in each draw.
  */
 function logLikelihood(observations: Observation[], pi: number[], sigma: number[]): number {
+  const context = weightContext(pi);
   let total = 0;
   for (const obs of observations) {
-    const { probs } = tierProbabilities(obs, pi, sigma);
+    const { probs } = tierProbabilities(obs, pi, sigma, context);
     const sum = probs.reduce((a, b) => a + b, 0);
     if (sum <= 0) continue;
     for (let t = 0; t < probs.length; t++) {
@@ -220,67 +303,27 @@ function probabilities(theta: number[], rows: number[][], total: number): number
   return exp.map((v) => (total * v) / sum);
 }
 
-/** Gradient of the log-likelihood with respect to π and σ directly. */
-function rawGradient(
-  observations: Observation[],
-  pi: number[],
-  sigma: number[],
-): { dPi: number[]; dSigma: number[] } {
-  const dPi = new Array(MAIN_POOL).fill(0);
-  const dSigma = new Array(SUPER_POOL).fill(0);
-
-  for (const obs of observations) {
-    const { probs, pb, sigmaHit } = tierProbabilities(obs, pi, sigma);
-    const sum = probs.reduce((a, b) => a + b, 0);
-    if (sum <= 0) continue;
-    // Weight on each tier: observed share minus modelled share.
-    const weight = probs.map(
-      (p, t) => (p > 0 ? obs.winners[t]! / p : 0) - obs.totalWinners / sum,
-    );
-
-    // ∂/∂π: drop each drawn ball in turn and re-convolve the other four.
-    for (let m = 0; m < obs.drawn.length; m++) {
-      const others = obs.drawn.filter((_, idx) => idx !== m).map((i) => pi[i]!);
-      const pbMinus = poissonBinomial(others);
-      let grad = 0;
-      for (let t = 0; t < PRIZE_TIERS.length; t++) {
-        const tier = PRIZE_TIERS[t]!;
-        let dMass = 0;
-        for (let k = tier.minMain; k <= tier.maxMain; k++) {
-          dMass += (pbMinus[k - 1] ?? 0) - (pbMinus[k] ?? 0);
-        }
-        grad += weight[t]! * dMass * (tier.superMatch ? sigmaHit : 1 - sigmaHit);
-      }
-      dPi[obs.drawn[m]!] += grad;
-    }
-
-    // ∂/∂σ only touches the Súper Balota that actually came out.
-    let gradSuper = 0;
-    for (let t = 0; t < PRIZE_TIERS.length; t++) {
-      const tier = PRIZE_TIERS[t]!;
-      let mass = 0;
-      for (let k = tier.minMain; k <= tier.maxMain; k++) mass += pb[k]!;
-      gradSuper += weight[t]! * mass * (tier.superMatch ? 1 : -1);
-    }
-    dSigma[obs.superIndex] += gradSuper;
-  }
-  return { dPi, dSigma };
-}
-
-/** Chain a probability-space gradient back to the feature weights. */
-function featureGradient(
-  dProb: number[],
-  probs: number[],
-  rows: number[][],
-  total: number,
-  featureCount: number,
+/**
+ * Numerical gradient of the log-likelihood in feature space.
+ *
+ * The exact match distribution is a ratio of elementary symmetric polynomials,
+ * whose analytic derivative is considerably more delicate than the
+ * Poisson-binomial's. With only eight parameters to fit, central differences
+ * are both simpler and fast enough — and they cannot silently disagree with the
+ * likelihood the way a hand-derived gradient can.
+ */
+function numericalGradient(
+  params: number[],
+  score: (candidate: number[]) => number,
+  step = 1e-4,
 ): number[] {
-  // Softmax Jacobian: ∂p_i/∂logit_m = p_i(δ_im − p_m/total).
-  const dot = probs.reduce((acc, p, i) => acc + p * dProb[i]!, 0);
-  const dLogit = probs.map((p, i) => p * (dProb[i]! - dot / total));
-  const grad = new Array(featureCount).fill(0);
-  for (let i = 0; i < rows.length; i++) {
-    for (let f = 0; f < featureCount; f++) grad[f]! += dLogit[i]! * rows[i]![f]!;
+  const grad = new Array(params.length).fill(0);
+  for (let i = 0; i < params.length; i++) {
+    const up = [...params];
+    const down = [...params];
+    up[i] = up[i]! + step;
+    down[i] = down[i]! - step;
+    grad[i] = (score(up) - score(down)) / (2 * step);
   }
   return grad;
 }
@@ -342,12 +385,22 @@ export function fitBiasModel(draws: Draw[], options: FitOptions = {}): BiasModel
     }
   };
 
+  const scoreMain = (candidate: number[]) =>
+    logLikelihood(
+      observations,
+      probabilities(candidate, mainRows, MAIN_PICK),
+      probabilities(phi, superRows, 1),
+    );
+  const scoreSuper = (candidate: number[]) =>
+    logLikelihood(
+      observations,
+      probabilities(theta, mainRows, MAIN_PICK),
+      probabilities(candidate, superRows, 1),
+    );
+
   for (let t = 1; t <= iterations; t++) {
-    const pi = probabilities(theta, mainRows, MAIN_PICK);
-    const sigma = probabilities(phi, superRows, 1);
-    const { dPi, dSigma } = rawGradient(observations, pi, sigma);
-    step(theta, featureGradient(dPi, pi, mainRows, MAIN_PICK, theta.length), aMain, t);
-    step(phi, featureGradient(dSigma, sigma, superRows, 1, phi.length), aSuper, t);
+    step(theta, numericalGradient(theta, scoreMain), aMain, t);
+    step(phi, numericalGradient(phi, scoreSuper), aSuper, t);
   }
 
   const pi = probabilities(theta, mainRows, MAIN_PICK);

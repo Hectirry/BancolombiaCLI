@@ -205,8 +205,8 @@ than folklore. The short version:
 | Can past results predict future ones? | **No.** Seven independent tests over 952 draws find nothing that distinguishes Baloto from a fair random machine. |
 | Is there a hidden pattern in the shape of the results? | **No.** 19 structural properties — sum, spread, clustering, carry-over, parity, primes — compared against 200 000 simulated fair draws: not one deviates, before or after correcting for multiple comparisons. |
 | Do hot / cold / "due" systems work? | **No.** Backtested over 852 draws, every system lands within 1.3 σ of a random ticket. |
-| Is *anything* predictable? | **Yes — the players.** Numbers 1–31 appear on tickets ~1.36× as often as 32–43, and 7 is played 1.49× as often as an average number. |
-| Does that help? | **A little.** Every category is pari-mutuel, so an unpopular combination is shared with fewer winners. It raises the return per ticket by roughly 3.5 percentage points — it does not make Baloto profitable. |
+| Is *anything* predictable? | **Yes — the players.** Numbers 1–31 appear on tickets ~1.28× as often as 32–43, and 7 is played 1.27× as often as an average number. |
+| Does that help? | **A little.** Every category is pari-mutuel, so an unpopular combination is shared with fewer winners. It raises the return per ticket by roughly 3–5 percentage points — it does not make Baloto profitable. |
 
 ```bash
 bancolombia baloto update --full --verify   # download + cross-check the history
@@ -236,6 +236,39 @@ Saturday, so two draws are never a day apart), and prize breakdowns whose
 columns do not multiply out — `prize per winner × winners = total paid` is
 checked on every row, which catches a 2021 page that renders one winner of
 $37 521 175 as 37 million winners.
+
+### A calibration failure worth reading about
+
+The first version of the preference model assumed a ticket's five slots were
+independent, which makes the match count a Poisson-binomial. Fitting it to the
+winner counts looked fine — the likelihood improved, the holdout validated —
+and it was badly wrong in a way no in-sample score exposed. Comparing predicted
+against actual winners *tier by tier* across 695 draws:
+
+| Category | actual / predicted, before | after |
+|---|---|---|
+| 5 + Súper Balota | **0.052** | 0.976 |
+| 4 + Súper Balota | 0.262 | 0.989 |
+| 3 aciertos | 0.649 | 1.010 |
+| 2 + Súper Balota | 1.014 | 1.003 |
+| 1 ó 0 + Súper Balota | 1.085 | 0.998 |
+
+Perfectly monotone, and a nineteen-fold over-prediction at the top. Independent
+slots allow a ticket to hold more or fewer than five numbers, which fattens the
+tail of the match distribution — exactly where the high-match categories live.
+The likelihood never noticed because the eighth category holds ~20 000 winners
+against ~100 in the fourth, so the fit optimised the categories that carry the
+count mass and let the tail drift by a factor of nineteen.
+
+The fix is the exact distribution: matching k of the drawn balls has probability
+e_k(w_drawn)·e_{5−k}(w_rest) / e_5(w_all). Every tier now lands within 10 % of
+its observed count, and the jackpot tier — 14 winners across 695 draws — is
+predicted at 14.
+
+The lesson generalises past this repo: a model can validate out of sample on the
+statistic it was fitted to and still be wrong by more than an order of magnitude
+on the quantity you actually care about. Checking predicted against observed
+*per category*, rather than in aggregate, is what caught it.
 
 ### Looking for a pattern, properly
 
@@ -343,8 +376,11 @@ several things predict *how many people already had them*.
 Nobody publishes which combinations were bought, but the operator publishes
 **how many tickets won each category**. That is enough. A random player's ticket
 contains number *i* with probability π_i (Σπ = 5); treating the five slots as
-independent makes the number of matches against a drawn combination a
-Poisson-binomial, so the expected winners per category follow in closed form.
+independent would make the number of matches against a drawn combination a
+Poisson-binomial — but a ticket holds *exactly* five numbers, and that
+distinction turned out to matter enormously (see below). The exact distribution
+under weighted sampling without replacement is a ratio of elementary symmetric
+polynomials, and that is what the model uses.
 Fitting π to ~700 published breakdowns recovers the crowd's preferences, and the
 unknown ticket volume drops out of the likelihood — so the estimate does not
 depend on guessing how many tickets were sold.
@@ -360,9 +396,9 @@ every time so the claim is never taken on faith.
 Nothing changes your probability of winning: every combination is 1 in
 15 401 568 for the jackpot and 1 in 14.4 for any prize. What a player controls
 is *how many people share the prize when it lands*. At a $52 800 million
-jackpot, a typical birthday ticket returns about 63.8 % of its price; a
-combination the crowd avoids returns about 67.4 %. Both are losing bets — the
-break-even jackpot is roughly $87 000 million.
+jackpot, a typical birthday ticket returns about 66.4 % of its price; a
+combination the crowd avoids returns about 71.1 %. Both are losing bets — the
+break-even jackpot is roughly $81 000 million.
 
 ## Configuration
 

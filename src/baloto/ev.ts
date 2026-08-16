@@ -25,7 +25,7 @@ import {
   tierProbability,
 } from "./rules.ts";
 import type { Combination, PrizeTier } from "./rules.ts";
-import { poissonBinomial, ticketPopularity, type BiasModel } from "./bias.ts";
+import { matchDistribution, ticketPopularity, type BiasModel } from "./bias.ts";
 import { makeRng, randInt } from "./random.ts";
 
 export interface EvOptions {
@@ -88,7 +88,12 @@ function tierProbabilityUnderModel(
   drawn: Combination,
   model: BiasModel,
 ): number {
-  const pb = poissonBinomial(drawn.main.map((n) => model.main[n - 1]!));
+  const weights = model.main.map((p) => p / (1 - p));
+  const drawnSet = new Set(drawn.main);
+  const inside = drawn.main.map((n) => weights[n - 1]!);
+  const outside: number[] = [];
+  for (let n = 1; n <= MAIN_POOL; n++) if (!drawnSet.has(n)) outside.push(weights[n - 1]!);
+  const pb = matchDistribution(inside, outside);
   const sigma = model.super[drawn.super - 1]!;
   let mass = 0;
   for (let k = tier.minMain; k <= tier.maxMain; k++) mass += pb[k]!;
