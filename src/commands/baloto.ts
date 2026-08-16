@@ -557,6 +557,53 @@ export async function physicalCommand(opts: {
   );
 }
 
+export async function realizedCommand(opts: { game?: string }): Promise<void> {
+  const dataset = await requireDataset();
+  const draws = drawsFor(dataset, parseGame(opts.game));
+  const { backtestSelection } = await import("../baloto/realized.ts");
+  const report = backtestSelection(draws);
+
+  console.log(c.bold("Number selection, backtested in pesos that were actually paid"));
+  console.log(
+    c.dim(
+      `  A selection rule is scored against the numbers that really came out and\n` +
+        `  the per-winner prizes really published. Learned on ${report.trainDraws} draws\n` +
+        `  (${report.trainFrom} → ${report.trainTo}), validated on ${report.testDraws} unseen ones\n` +
+        `  (${report.testFrom} → ${report.testTo}). The jackpot tier is excluded: it has\n` +
+        "  fallen 14 times ever, which is noise, not signal.",
+    ),
+  );
+  console.log("");
+  console.log(
+    table(
+      ["RULE (γ)", "TRAIN $/TICKET", "TEST $/TICKET"],
+      report.points.map((p) => [
+        p.gamma === -1 ? "-1 imitate the crowd" : p.gamma === 0 ? " 0 uniform quick-pick" : ` ${p.gamma} lean against`,
+        money(p.trainValue),
+        money(p.testValue),
+      ]),
+    ),
+  );
+  console.log("");
+  console.log(`  Learned on TRAIN: γ = ${c.bold(String(report.learnedGamma))} (the most contrarian in range).`);
+  console.log(
+    `  On unseen draws it realised ${c.bold(money(report.testLearned))} per ticket against ` +
+      `${money(report.testCrowdLike)} for a crowd-like ticket — ${c.bold(pct(report.testLearned / report.testCrowdLike - 1))} more, in real payouts.`,
+  );
+  console.log(
+    `  Win rate on the same draws: ${pct(report.winRateLearned)} vs ${pct(report.winRateCrowdLike)} — ` +
+      c.dim("the odds never moved; only the pesos per win did."),
+  );
+  console.log("");
+  console.log(
+    c.dim(
+      "  This is the sharing mechanism, measured where it can be (thousands of\n" +
+        "  pari-mutuel payouts) — the same mechanism the EV model applies to the\n" +
+        "  jackpot, where only 14 events exist to test it directly.",
+    ),
+  );
+}
+
 export async function chaosCommand(opts: {
   epsilon?: string;
   duration?: string;
@@ -819,6 +866,7 @@ export async function summaryCommand(): Promise<void> {
   console.log(`  ${c.cyan("baloto pca")}       Principal components, and what predicts prize sharing`);
   console.log(`  ${c.cyan("baloto bias")}      Measure how players choose their numbers`);
   console.log(`  ${c.cyan("baloto ev")}        Price a ticket, with pari-mutuel splitting and tax`);
+  console.log(`  ${c.cyan("baloto realized")}  Backtest the selection rule in actually-paid pesos`);
   console.log(`  ${c.cyan("baloto pick")}      Generate combinations the crowd avoids`);
   console.log("");
   if (dataset) {

@@ -169,6 +169,15 @@ baloto
   });
 
 baloto
+  .command("realized")
+  .description("Backtest number selection against real draws and real published payouts")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .action(async (opts: { game?: string }) => {
+    const { realizedCommand } = await import("./commands/baloto.ts");
+    await realizedCommand(opts);
+  });
+
+baloto
   .command("chaos")
   .description("Twin-simulate the ball chamber and measure how fast prediction dies")
   .option("-e, --epsilon <metres>", "Initial perturbation of one ball", "1e-9")

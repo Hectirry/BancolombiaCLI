@@ -218,6 +218,7 @@ bancolombia baloto physical                 # hunt for a biased ball, and measur
 bancolombia baloto chaos                    # twin-simulate the chamber; measure how fast prediction dies
 bancolombia baloto bias                     # how do players choose numbers?
 bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
+bancolombia baloto realized                 # selection rule backtested in actually-paid pesos
 bancolombia baloto pick -n 5                # combinations the crowd avoids
 ```
 
@@ -478,6 +479,28 @@ interpretable effects instead ("can this be a day of the month", "is it 7", a
 smooth drift from low to high), and `baloto bias` re-runs the held-out check
 every time so the claim is never taken on faith.
 
+### The selection rule, backtested in pesos that were actually paid
+
+Every other check scores selection against a *model* of the crowd. `baloto
+realized` removes the model from the scoring side: a rule is evaluated against
+the numbers that really came out and the per-winner prizes really published.
+The rule's aggressiveness γ is learned on the first 347 draws and validated on
+348 the model never saw:
+
+| Rule | Realised $/ticket (unseen half) |
+|---|---|
+| imitate the crowd (γ = −1) | $589 |
+| uniform quick-pick (γ = 0) | $593 |
+| lean hard against (γ = 8, learned) | **$630 (+6.9 %)** |
+
+The value is monotone in γ on both halves, and the win rate stays flat
+(6.6 % vs 7.0 %) — the odds never move; only the pesos per win do, which is
+precisely the sharing mechanism's signature. The jackpot tier is excluded from
+the metric: it has fallen 14 times in the whole history, so its realised value
+is noise (including it flips the γ ranking between halves — noise showing
+itself). The mechanism is measured where thousands of payouts exist, and it is
+the same mechanism the EV model applies to the jackpot.
+
 ### What "improving your odds" can and cannot mean
 
 Nothing changes your probability of winning: every combination is 1 in
@@ -531,6 +554,7 @@ src/
     bias.ts         Player-preference model fitted to winner counts
     ev.ts           Pari-mutuel expected value, sharing and break-even
     pick.ts         Generator for combinations the crowd avoids
+    realized.ts     Selection rule backtested against real draws and payouts
   commands/         One file per CLI command
   ui/format.ts      Terminal tables & money formatting
 ```
