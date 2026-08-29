@@ -66,6 +66,15 @@ export const MAIN_FEATURES: Feature[] = [
     value: (n) => n / MAIN_POOL,
   },
   {
+    name: "teens",
+    description: "10-19: over-played beyond the smooth drift",
+    // Added after a week of live scoring showed structure the smooth drift
+    // missed; validated the same way every feature is - it improves the
+    // held-out likelihood (+241), unlike the free-per-ball and contextual
+    // variants, which were tested and rejected.
+    value: (n) => (n >= 10 && n <= 19 ? 1 : 0),
+  },
+  {
     name: "lucky-7",
     description: "The number 7 specifically",
     value: (n) => (n === 7 ? 1 : 0),
