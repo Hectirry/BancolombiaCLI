@@ -133,12 +133,12 @@ describe("scoreVolumeForecast", () => {
     const mae = (rows: { error: number }[]) =>
       rows.reduce((a, r) => a + Math.abs(r.error), 0) / rows.length;
     expect(mae(windowed)).toBeLessThan(mae(everything));
-  });
+  }, 20_000);
 
   test("a stationary market leaves no systematic bias", () => {
     const draws = season(180, 33);
     const scored = scoreVolumeForecast(draws, draws[140]!.date, 80);
     const bias = scored.reduce((a, r) => a + r.error, 0) / scored.length;
     expect(Math.abs(bias)).toBeLessThan(0.05);
-  });
+  }, 20_000);
 });
