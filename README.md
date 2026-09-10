@@ -220,7 +220,40 @@ bancolombia baloto bias                     # how do players choose numbers?
 bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto realized                 # selection rule backtested in actually-paid pesos
 bancolombia baloto pick -n 5                # combinations the crowd avoids
+bancolombia baloto super -n 3 --typical     # maximise P(hit the Súper Balota), and nothing else
 ```
+
+### Súper Balota: six rules tried, none of them work — and one that does not need to
+
+`baloto super` answers a narrower question than the rest of the suite: forget
+payout, just hit the Súper Balota. Six selection rules were run walk-forward
+over 564 draws — highest posterior, lowest posterior, avoid the last three,
+repeat the last three, a fixed 1-2-3, and the least played. Every one lands
+inside the noise band around the theoretical rate, best at z = +1.54 with six
+comparisons on the table.
+
+| Rule | Hits | Rate | z |
+| --- | --- | --- | --- |
+| lowest posterior (cold) | 120/564 | 21.3 % | +1.54 |
+| highest posterior (hot) | 114/564 | 20.2 % | +0.89 |
+| repeat the last three | 100/564 | 17.7 % | −0.62 |
+| avoid the last three | 93/564 | 16.5 % | −1.38 |
+| fixed 1-2-3 | 92/564 | 16.3 % | −1.48 |
+| least played by the crowd | 92/564 | 16.3 % | −1.48 |
+
+Nothing predicts the ball. What *is* exact is the coverage arithmetic: N
+**distinct** Súper Balotas are mutually exclusive events, so they hit with
+probability N/16 — 6.25 %, 12.50 %, 18.75 % — with no assumption about the
+machine at all. That is the whole lever, and it is a real tripling at three
+tickets.
+
+Since the objective cannot separate the sixteen, the order among them is free.
+An earlier version ranked by posterior mean and put Súper Balota 7 first, the
+most-played ball in the country. The tiebreak now goes to the least-played
+instead: out of sample the hit rate is statistically identical (14.8 % vs
+19.4 %, both within 2σ of 18.75 %) while the +Súper tiers pay 1.53× more per
+winner, on 19 % fewer co-winners. The five main numbers are left to `pick`,
+because the Súper-Balota objective does not constrain them.
 
 ### The backtest that found a 19 % error: prizes are funded net of VAT
 

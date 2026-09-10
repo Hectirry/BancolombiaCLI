@@ -54,6 +54,26 @@ Tres boletos con solape ≤ 2 y súper balotas distintas: probabilidad de ganar
 algo 20,6 % por noche contra 7,0 % de tres copias. No cambia el balance
 esperado; cambia la frecuencia de recuperar algo.
 
+## Regla 6 — La súper balota: cubrir, no adivinar
+
+Seis reglas de selección medidas walk-forward sobre 564 sorteos (posterior
+alta, posterior baja, evitar las últimas, repetir las últimas, fija 1-2-3,
+la menos jugada): ninguna se separa de la tasa teórica. La mejor llega a
+21,3 % contra 18,8 % esperado, z = +1,54, dentro del ruido y con seis
+comparaciones encima. **Nada predice cuál sale.**
+
+Lo que sí es exacto es la cobertura: N súper balotas *distintas* aciertan
+con probabilidad N/16, sin suponer nada sobre la máquina. Uno 6,25 %, dos
+12,50 %, tres 18,75 %.
+
+Como el objetivo es indiferente entre las dieciséis, el desempate es gratis
+y va a la única cantidad medida: cuánta gente juega cada balota. Fuera de
+muestra, cubrir las tres menos jugadas contra las tres más jugadas da la
+misma tasa de acierto (14,8 % vs 19,4 %, ambas dentro de ±2σ de 18,8 %) y
+1,53× el premio por ganador en las categorías +SB, con 19 % menos
+co-ganadores. Una versión anterior de este modelo ordenaba por posterior y
+ponía primera la súper balota 7 — la más jugada del país. Corregido.
+
 ## Lo que ninguna regla puede hacer
 
 Cada combinación sigue teniendo probabilidad 1 en 15.401.568. Las cinco

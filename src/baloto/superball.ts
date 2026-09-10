@@ -15,13 +15,22 @@
  * 861 draws found nothing that beats guessing (best 7.32 % against 6.25 %
  * expected, inside the ±1.65 pt band). So no ball is *established* as likelier.
  *
- * But a decision still has to be made, and "flat posterior" does not mean "no
- * action". Under a pure hit-maximising loss with no payout term, the Bayes
- * action is to play the ball with the highest posterior mean — the tiebreak
- * that a strict maximiser takes when the evidence is weak but not empty. The
- * prior strength controls how far that mean is allowed to drift from 1/16:
- * `priorStrength` of 1 is nearly uninformative, large values encode the
- * fairness the rest of this suite has repeatedly failed to reject.
+ * A decision still has to be made, and an earlier version of this file took the
+ * highest posterior mean as the tiebreak — "the Bayes action when the evidence
+ * is weak but not empty". A walk-forward over 564 draws killed that: ranking by
+ * posterior mean hits 20.21 % against 18.75 % expected (z = +0.89), ranking by
+ * the *lowest* posterior hits 21.28 % (z = +1.54), a fixed 1-2-3 hits 16.31 %
+ * (z = -1.48). Six rules, every one inside noise. Chasing the posterior buys
+ * nothing, and it is not harmless: on the real history it put Súper Balota 7
+ * first, the single most-played ball in the country.
+ *
+ * So the ordering here is layered. If a ball is genuinely *distinguishable* —
+ * its simultaneous interval excludes 1/16 — the objective can separate it and
+ * posterior mean decides. When no ball is distinguishable, which is the case on
+ * every history this suite has seen, the objective is exactly indifferent: any
+ * N distinct balls hit with probability N/16. The tiebreak then falls to the one
+ * thing that *is* measured — how many people play each ball — and costs nothing,
+ * because it only chooses among options the objective itself cannot rank.
  *
  * ACROSS TICKETS the lever is real and exact. Distinct Súper Balotas make the
  * events mutually exclusive, so N tickets hit with probability N/16 — a genuine
@@ -90,7 +99,7 @@ export function superPosterior(draws: Draw[], priorStrength = 1): SuperPosterior
 }
 
 export interface SuperPlan {
-  /** Súper Balotas to play, best posterior mean first. */
+  /** Súper Balotas to play, best first. */
   balls: number[];
   /** Exact probability that one of them matches: tickets / 16. */
   hitProbability: number;
@@ -100,29 +109,167 @@ export interface SuperPlan {
   distinguishable: number[];
   /** Posterior spread between the best and worst ball, in percentage points. */
   spreadPoints: number;
+  /** What actually decided the order. */
+  rule: "posterior" | "least-played" | "arbitrary";
+  /**
+   * Expected co-winners on the chosen balls relative to an average ball. Below
+   * 1 means fewer people share the prize; it never moves `hitProbability`.
+   */
+  crowding: number;
+}
+
+export interface CoverageOptions {
+  /** Dirichlet concentration per ball. */
+  priorStrength?: number;
+  /**
+   * σ: probability that a player's Súper Balota is each of the sixteen, from
+   * the crowd model. Used only to break ties the objective cannot break.
+   */
+  superWeights?: number[];
 }
 
 /**
- * The Bayes action for a pure hit-maximising objective: take the `tickets`
- * balls with the highest posterior mean, each on its own ticket.
+ * The plan for a pure hit-maximising objective: `tickets` *distinct* balls.
  *
- * Distinct balls are what makes the arithmetic exact — the events cannot both
- * happen, so the probabilities add. Repeating a ball would waste a ticket.
+ * Distinctness is what makes the arithmetic exact — the events are mutually
+ * exclusive, so the probabilities add to tickets/16 whatever the machine is
+ * doing. Repeating a ball would waste a ticket.
+ *
+ * Which distinct balls is a separate question, and on a history where nothing
+ * is distinguishable the objective has no opinion at all: every choice is
+ * tickets/16. The order below therefore uses posterior mean only when a ball is
+ * genuinely distinguishable, and otherwise prefers the balls fewest people
+ * play. That is not a payout objective sneaking back in — it is a tiebreak
+ * among options that are identical on the stated objective, and it is free.
  */
 export function planSuperCoverage(
   draws: Draw[],
   tickets = 3,
-  priorStrength = 1,
+  options: CoverageOptions | number = {},
 ): SuperPlan {
+  const opts: CoverageOptions =
+    typeof options === "number" ? { priorStrength: options } : options;
+  const priorStrength = opts.priorStrength ?? 1;
   const posterior = superPosterior(draws, priorStrength);
-  const ranked = [...posterior].sort((a, b) => b.mean - a.mean);
-  const chosen = ranked.slice(0, Math.min(tickets, SUPER_POOL));
+  const separable = posterior.filter((p) => p.distinguishable);
 
+  const weights = opts.superWeights;
+  const usable =
+    weights !== undefined &&
+    weights.length === SUPER_POOL &&
+    weights.every((w) => Number.isFinite(w) && w > 0);
+
+  let ranked: SuperPosterior[];
+  let rule: SuperPlan["rule"];
+  if (separable.length > 0) {
+    // The evidence separates the balls, so the objective itself decides.
+    ranked = [...posterior].sort((a, b) => b.mean - a.mean);
+    rule = "posterior";
+  } else if (usable) {
+    ranked = [...posterior].sort((a, b) => weights![a.ball - 1]! - weights![b.ball - 1]!);
+    rule = "least-played";
+  } else {
+    ranked = [...posterior];
+    rule = "arbitrary";
+  }
+
+  const chosen = ranked.slice(0, Math.min(tickets, SUPER_POOL));
+  const mean = usable ? weights!.reduce((a, b) => a + b, 0) / SUPER_POOL : 0;
+  const crowding = usable
+    ? chosen.reduce((a, p) => a + weights![p.ball - 1]!, 0) / (chosen.length * mean)
+    : 1;
+
+  const means = posterior.map((p) => p.mean);
   return {
     balls: chosen.map((p) => p.ball),
     hitProbability: chosen.length / SUPER_POOL,
     singleTicket: 1 / SUPER_POOL,
-    distinguishable: posterior.filter((p) => p.distinguishable).map((p) => p.ball),
-    spreadPoints: (ranked[0]!.mean - ranked[ranked.length - 1]!.mean) * 100,
+    distinguishable: separable.map((p) => p.ball),
+    spreadPoints: (Math.max(...means) - Math.min(...means)) * 100,
+    rule,
+    crowding,
   };
+}
+
+/** One candidate way of choosing which Súper Balotas to cover. */
+export interface SuperRule {
+  name: string;
+  /** Given the draws before a target, the balls to play. */
+  choose: (past: Draw[], tickets: number) => number[];
+}
+
+export interface SuperRuleScore {
+  name: string;
+  hits: number;
+  draws: number;
+  rate: number;
+  /** Standard scores against the tickets/16 null. */
+  z: number;
+  /** True when |z| clears the Bonferroni threshold for the whole tournament. */
+  beatsChance: boolean;
+}
+
+/**
+ * Walk-forward tournament over candidate rules.
+ *
+ * The null is not "no skill" in the vague sense: distinct balls hit at exactly
+ * tickets/16, so any rule that plays `tickets` distinct balls has that hit rate
+ * by construction unless the machine is unfair. This measures the departure and
+ * corrects the threshold for however many rules were tried, which is the step
+ * that stops a sixteen-way search from manufacturing a winner.
+ */
+export function scoreSuperRules(
+  draws: Draw[],
+  rules: SuperRule[],
+  tickets = 3,
+  warmup = 400,
+): SuperRuleScore[] {
+  const start = Math.min(warmup, draws.length);
+  const trials = draws.length - start;
+  const hits = rules.map(() => 0);
+  for (let i = start; i < draws.length; i++) {
+    const past = draws.slice(0, i);
+    const truth = draws[i]!.super;
+    rules.forEach((rule, r) => {
+      if (rule.choose(past, tickets).includes(truth)) hits[r]!++;
+    });
+  }
+  const base = tickets / SUPER_POOL;
+  const sd = trials > 0 ? Math.sqrt((base * (1 - base)) / trials) : Infinity;
+  // Two-sided 5 % spread over however many rules were entered.
+  const threshold = rules.length > 1 ? bonferroniZ(rules.length) : 1.96;
+  return rules.map((rule, r) => {
+    const rate = trials > 0 ? hits[r]! / trials : 0;
+    const z = (rate - base) / sd;
+    return {
+      name: rule.name,
+      hits: hits[r]!,
+      draws: trials,
+      rate,
+      z,
+      beatsChance: Math.abs(z) > threshold,
+    };
+  });
+}
+
+/** Normal quantile for a two-sided 5 % test spread over `k` comparisons. */
+function bonferroniZ(k: number): number {
+  // Newton on Phi(z) = 1 - 0.025/k, with the usual erf-free normal CDF.
+  const target = 1 - 0.025 / k;
+  let z = 2;
+  for (let i = 0; i < 60; i++) {
+    const cdf = normalCdf(z);
+    const pdf = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+    z += (target - cdf) / pdf;
+  }
+  return z;
+}
+
+function normalCdf(z: number): number {
+  // Abramowitz & Stegun 26.2.17, good to 7.5e-8 — ample for a threshold.
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const poly =
+    t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const tail = (Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI)) * poly;
+  return z >= 0 ? 1 - tail : tail;
 }

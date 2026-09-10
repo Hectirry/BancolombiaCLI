@@ -879,3 +879,172 @@ export async function summaryCommand(): Promise<void> {
     console.log(c.yellow("  No data yet — start with `bancolombia baloto update`."));
   }
 }
+
+/**
+ * `baloto super` — the model whose only objective is hitting the Súper Balota.
+ *
+ * It reports three things in order of how much they matter: the tournament
+ * (nothing predicts which ball comes out), the coverage arithmetic (the only
+ * real lever, and it is exact), and the tickets that follow from both.
+ */
+export async function superCommand(opts: {
+  game?: string;
+  tickets?: string;
+  prior?: string;
+  warmup?: string;
+  typical?: boolean;
+  seed?: string;
+}): Promise<void> {
+  const game = parseGame(opts.game);
+  const dataset = await requireDataset();
+  const draws = drawsFor(dataset, game);
+  const tickets = opts.tickets ? Number.parseInt(opts.tickets, 10) : 3;
+  const priorStrength = opts.prior ? Number(opts.prior) : 1;
+
+  const { planSuperCoverage, scoreSuperRules, superPosterior } = await import(
+    "../baloto/superball.ts"
+  );
+  const { model } = await loadBiasModel(game);
+
+  console.log(c.bold(`Súper Balota — ${draws.length.toLocaleString("es-CO")} draws of ${game}`));
+  console.log("");
+
+  // 1. Does anything predict the ball at all?
+  const warmup = opts.warmup ? Number.parseInt(opts.warmup, 10) : 400;
+  const rules = [
+    {
+      name: "highest posterior (hot)",
+      choose: (past: typeof draws, n: number) =>
+        superPosterior(past, priorStrength)
+          .sort((a, b) => b.mean - a.mean)
+          .slice(0, n)
+          .map((p) => p.ball),
+    },
+    {
+      name: "lowest posterior (cold)",
+      choose: (past: typeof draws, n: number) =>
+        superPosterior(past, priorStrength)
+          .sort((a, b) => a.mean - b.mean)
+          .slice(0, n)
+          .map((p) => p.ball),
+    },
+    {
+      name: "avoid the last three drawn",
+      choose: (past: typeof draws, n: number) => {
+        const recent = new Set(past.slice(-3).map((d) => d.super));
+        return Array.from({ length: SUPER_POOL }, (_, i) => i + 1)
+          .filter((b) => !recent.has(b))
+          .slice(0, n);
+      },
+    },
+    {
+      name: "repeat the last three drawn",
+      choose: (past: typeof draws, n: number) =>
+        [...new Set(past.slice(-6).map((d) => d.super))].slice(0, n),
+    },
+    {
+      name: "fixed 1-2-3",
+      choose: (_: typeof draws, n: number) => [1, 2, 3].slice(0, n),
+    },
+    {
+      name: "least played by the crowd",
+      choose: (_: typeof draws, n: number) =>
+        model.super
+          .map((w, i) => ({ ball: i + 1, w }))
+          .sort((a, b) => a.w - b.w)
+          .slice(0, n)
+          .map((x) => x.ball),
+    },
+  ];
+  const scores = scoreSuperRules(draws, rules, tickets, warmup);
+  const base = tickets / SUPER_POOL;
+  console.log(
+    c.dim(
+      `  Walk-forward over ${scores[0]?.draws.toLocaleString("es-CO") ?? 0} draws. Any ${tickets} distinct balls hit at exactly ` +
+        `${pct(base)};\n  a rule only means something if it clears that by more than the field allows.`,
+    ),
+  );
+  console.log("");
+  console.log(
+    table(
+      ["RULE", "HITS", "RATE", "Z", "REAL?"],
+      scores
+        .slice()
+        .sort((a, b) => b.rate - a.rate)
+        .map((s) => [
+          s.name,
+          `${s.hits}/${s.draws}`,
+          pct(s.rate),
+          `${s.z >= 0 ? "+" : ""}${s.z.toFixed(2)}`,
+          s.beatsChance ? c.green("yes") : c.dim("no"),
+        ]),
+    ),
+  );
+  console.log("");
+
+  // 2. The posterior, and whether any ball is separable at all.
+  const posterior = superPosterior(draws, priorStrength);
+  const plan = planSuperCoverage(draws, tickets, {
+    priorStrength,
+    superWeights: model.super,
+  });
+  if (plan.distinguishable.length === 0) {
+    console.log(
+      c.dim(
+        `  No ball is distinguishable from 1/16 once all sixteen intervals are read at once.\n` +
+          `  The posterior spans ${plan.spreadPoints.toFixed(2)} points best to worst, which is what a fair machine gives.`,
+      ),
+    );
+  } else {
+    console.log(
+      c.yellow(`  Distinguishable from 1/16: ${plan.distinguishable.join(", ")}`),
+    );
+  }
+  console.log("");
+
+  // 3. The plan.
+  console.log(
+    c.bold(
+      `  ${tickets} ticket(s) → ${pct(plan.hitProbability)} chance of matching the Súper Balota ` +
+        `(${pct(plan.singleTicket)} on one)`,
+    ),
+  );
+  const order =
+    plan.rule === "posterior"
+      ? "ranked by posterior mean — a ball here is genuinely likelier"
+      : plan.rule === "least-played"
+        ? `ranked by how few people play them (${plan.crowding.toFixed(2)}× the average crowd), ` +
+          "which costs nothing:\n  the hit probability above is exact whichever sixteenths you cover"
+        : "in no particular order — nothing separates them";
+  console.log(c.dim(`  Balls ${plan.balls.join(", ")}, ${order}.`));
+  console.log("");
+
+  const { pickReport } = await import("../baloto/pick.ts");
+  const report = pickReport(model, {
+    count: tickets,
+    pool: 400,
+    typical: opts.typical === true,
+    seed: opts.seed ? Number.parseInt(opts.seed, 10) : undefined,
+  });
+  const rows = report.tickets.map((t, i) => [
+    t.ticket.main.map((n) => String(n).padStart(2, "0")).join(" "),
+    String(plan.balls[i] ?? t.ticket.super).padStart(2, "0"),
+    `${(model.super[(plan.balls[i] ?? t.ticket.super) - 1]! * SUPER_POOL).toFixed(2)}×`,
+  ]);
+  console.log(table(["MAIN NUMBERS", "SÚPER", "CROWD ON THAT SÚPER"], rows));
+  console.log("");
+  console.log(
+    c.dim(
+      "  The five main numbers are free: the objective above does not constrain them,\n" +
+        "  so they are taken from the least-played combinations. A Súper Balota hit pays\n" +
+        "  something at any number of main matches, so every hit is a winning ticket.",
+    ),
+  );
+  console.log("");
+  console.log(
+    c.yellow(
+      `  ${pct(plan.hitProbability)} is the probability of hitting the Súper Balota, not of winning the jackpot.\n` +
+        "  The jackpot still needs all five main numbers as well, at 1 in 962 598.",
+    ),
+  );
+}

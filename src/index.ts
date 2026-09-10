@@ -235,6 +235,20 @@ baloto
     await pickCommand(opts as never);
   });
 
+baloto
+  .command("super")
+  .description("Maximise the chance of hitting the Súper Balota, and nothing else")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("-n, --tickets <number>", "Tickets to spend, one distinct Súper Balota each", "3")
+  .option("--prior <number>", "Dirichlet strength: higher assumes a fairer machine", "1")
+  .option("--warmup <number>", "Draws reserved before the rule tournament scores", "400")
+  .option("--typical", "Only main numbers shaped like a plausible real result")
+  .option("--seed <number>", "Seed, for reproducible tickets")
+  .action(async (opts: Record<string, string>) => {
+    const { superCommand } = await import("./commands/baloto.ts");
+    await superCommand(opts as never);
+  });
+
 program
   .command("mcp")
   .description("Start the MCP server over stdio (for Claude Desktop)")
