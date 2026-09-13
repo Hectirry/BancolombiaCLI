@@ -1034,12 +1034,21 @@ export async function superCommand(opts: {
     typical: opts.typical === true,
     seed: opts.seed ? Number.parseInt(opts.seed, 10) : undefined,
   });
-  const rows = report.tickets.map((t, i) => [
-    t.ticket.main.map((n) => String(n).padStart(2, "0")).join(" "),
-    String(plan.balls[i] ?? t.ticket.super).padStart(2, "0"),
-    `${(model.super[(plan.balls[i] ?? t.ticket.super) - 1]! * SUPER_POOL).toFixed(2)}×`,
-  ]);
-  console.log(table(["MAIN NUMBERS", "SÚPER", "CROWD ON THAT SÚPER"], rows));
+  // The crowd column is a payout figure; it only appears when the caller
+  // chose the crowd tiebreak, so the default report stays about hitting.
+  const showCrowd = plan.rule === "least-played";
+  const rows = report.tickets.map((t, i) => {
+    const ball = plan.balls[i] ?? t.ticket.super;
+    const row = [
+      t.ticket.main.map((n) => String(n).padStart(2, "0")).join(" "),
+      String(ball).padStart(2, "0"),
+    ];
+    if (showCrowd) row.push(`${(model.super[ball - 1]! * SUPER_POOL).toFixed(2)}×`);
+    return row;
+  });
+  console.log(
+    table(showCrowd ? ["MAIN NUMBERS", "SÚPER", "CROWD ON THAT SÚPER"] : ["MAIN NUMBERS", "SÚPER"], rows),
+  );
   console.log("");
   console.log(
     c.dim(
