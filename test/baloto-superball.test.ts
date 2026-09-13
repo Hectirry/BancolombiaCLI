@@ -81,9 +81,17 @@ describe("planSuperCoverage", () => {
     expect(plan.rule).toBe("posterior");
   });
 
-  test("with nothing distinguishable, prefers the balls fewest people play", () => {
+  test("by default ranks by posterior mean even when nothing is distinguishable", () => {
     const crowd = Array.from({ length: SUPER_POOL }, (_, i) => (i + 1) / 136);
     const plan = planSuperCoverage(draws, 3, { superWeights: crowd });
+    expect(plan.rule).toBe("posterior");
+    const means = superPosterior(draws).sort((a, b) => b.mean - a.mean);
+    expect(plan.balls).toEqual(means.slice(0, 3).map((p) => p.ball));
+  });
+
+  test("only prefers the balls fewest people play when asked to", () => {
+    const crowd = Array.from({ length: SUPER_POOL }, (_, i) => (i + 1) / 136);
+    const plan = planSuperCoverage(draws, 3, { tiebreak: "least-played", superWeights: crowd });
     expect(plan.rule).toBe("least-played");
     expect(plan.balls).toEqual([1, 2, 3]);
     expect(plan.crowding).toBeLessThan(1);
@@ -91,9 +99,10 @@ describe("planSuperCoverage", () => {
     expect(plan.hitProbability).toBeCloseTo(3 / SUPER_POOL, 12);
   });
 
-  test("says so when it had no basis for the order at all", () => {
-    expect(planSuperCoverage(draws, 3).rule).toBe("arbitrary");
-    expect(planSuperCoverage(draws, 3).crowding).toBe(1);
+  test("says so when asked for a crowd tiebreak without a crowd model", () => {
+    const plan = planSuperCoverage(draws, 3, { tiebreak: "least-played" });
+    expect(plan.rule).toBe("arbitrary");
+    expect(plan.crowding).toBe(1);
   });
 
   test("still accepts a bare prior strength, as it used to", () => {

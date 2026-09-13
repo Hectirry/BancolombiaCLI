@@ -247,13 +247,15 @@ probability N/16 — 6.25 %, 12.50 %, 18.75 % — with no assumption about the
 machine at all. That is the whole lever, and it is a real tripling at three
 tickets.
 
-Since the objective cannot separate the sixteen, the order among them is free.
-An earlier version ranked by posterior mean and put Súper Balota 7 first, the
-most-played ball in the country. The tiebreak now goes to the least-played
-instead: out of sample the hit rate is statistically identical (14.8 % vs
-19.4 %, both within 2σ of 18.75 %) while the +Súper tiers pay 1.53× more per
-winner, on 19 % fewer co-winners. The five main numbers are left to `pick`,
-because the Súper-Balota objective does not constrain them.
+Since the objective cannot separate the sixteen, the order among them is a
+tiebreak. The default is the Bayes action for the stated objective — highest
+posterior mean first — with the report saying plainly that the gap is noise.
+`--tiebreak crowd` instead prefers the least-played balls: out of sample the
+hit rate is statistically identical (14.8 % vs 19.4 %, both within 2σ of
+18.75 %) while the +Súper tiers pay 1.53× more per winner on 19 % fewer
+co-winners. That is a payout criterion, which is why it is opt-in. The five
+main numbers are left to `pick`, because the Súper-Balota objective does not
+constrain them.
 
 ### The backtest that found a 19 % error: prizes are funded net of VAT
 

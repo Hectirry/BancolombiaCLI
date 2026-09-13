@@ -891,6 +891,7 @@ export async function superCommand(opts: {
   game?: string;
   tickets?: string;
   prior?: string;
+  tiebreak?: string;
   warmup?: string;
   typical?: boolean;
   seed?: string;
@@ -984,8 +985,12 @@ export async function superCommand(opts: {
 
   // 2. The posterior, and whether any ball is separable at all.
   const posterior = superPosterior(draws, priorStrength);
+  if (opts.tiebreak !== undefined && opts.tiebreak !== "posterior" && opts.tiebreak !== "crowd") {
+    throw new Error('--tiebreak must be "posterior" or "crowd".');
+  }
   const plan = planSuperCoverage(draws, tickets, {
     priorStrength,
+    tiebreak: opts.tiebreak === "crowd" ? "least-played" : "posterior",
     superWeights: model.super,
   });
   if (plan.distinguishable.length === 0) {
@@ -1011,7 +1016,10 @@ export async function superCommand(opts: {
   );
   const order =
     plan.rule === "posterior"
-      ? "ranked by posterior mean — a ball here is genuinely likelier"
+      ? plan.distinguishable.length > 0
+        ? "ranked by posterior mean — a ball here is genuinely likelier"
+        : `ranked by posterior mean, the Bayes action for a pure hit objective. The gap between\n` +
+          `  them (${plan.spreadPoints.toFixed(2)} points) is inside noise: it is a tiebreak, not evidence`
       : plan.rule === "least-played"
         ? `ranked by how few people play them (${plan.crowding.toFixed(2)}× the average crowd), ` +
           "which costs nothing:\n  the hit probability above is exact whichever sixteenths you cover"

@@ -24,13 +24,16 @@
  * nothing, and it is not harmless: on the real history it put Súper Balota 7
  * first, the single most-played ball in the country.
  *
- * So the ordering here is layered. If a ball is genuinely *distinguishable* —
- * its simultaneous interval excludes 1/16 — the objective can separate it and
- * posterior mean decides. When no ball is distinguishable, which is the case on
- * every history this suite has seen, the objective is exactly indifferent: any
- * N distinct balls hit with probability N/16. The tiebreak then falls to the one
- * thing that *is* measured — how many people play each ball — and costs nothing,
- * because it only chooses among options the objective itself cannot rank.
+ * So the ranking is honest about what it is. If a ball is genuinely
+ * *distinguishable* — its simultaneous interval excludes 1/16 — the objective
+ * can separate it and posterior mean decides. When no ball is distinguishable,
+ * which is the case on every history this suite has seen, the objective is
+ * exactly indifferent: any N distinct balls hit with probability N/16. The
+ * default still ranks by posterior mean, because that is the Bayes action for
+ * the stated objective, and the user of this model asked for that objective and
+ * nothing else. The "least-played" tiebreak is offered, not imposed: it spends
+ * the indifference on the one thing that is measured, at zero cost to the hit
+ * probability, but it is a payout criterion and it says so.
  *
  * ACROSS TICKETS the lever is real and exact. Distinct Súper Balotas make the
  * events mutually exclusive, so N tickets hit with probability N/16 — a genuine
@@ -122,8 +125,16 @@ export interface CoverageOptions {
   /** Dirichlet concentration per ball. */
   priorStrength?: number;
   /**
+   * How to order balls the evidence cannot separate. "posterior" is the Bayes
+   * action for a pure hit objective — highest posterior mean first, even when
+   * the gap is inside noise. "least-played" ignores hit probability (it is
+   * identical either way) and prefers the balls fewest people play; it needs
+   * `superWeights`. Default "posterior": the objective as stated.
+   */
+  tiebreak?: "posterior" | "least-played";
+  /**
    * σ: probability that a player's Súper Balota is each of the sixteen, from
-   * the crowd model. Used only to break ties the objective cannot break.
+   * the crowd model. Only consulted when `tiebreak` is "least-played".
    */
   superWeights?: number[];
 }
@@ -137,10 +148,11 @@ export interface CoverageOptions {
  *
  * Which distinct balls is a separate question, and on a history where nothing
  * is distinguishable the objective has no opinion at all: every choice is
- * tickets/16. The order below therefore uses posterior mean only when a ball is
- * genuinely distinguishable, and otherwise prefers the balls fewest people
- * play. That is not a payout objective sneaking back in — it is a tiebreak
- * among options that are identical on the stated objective, and it is free.
+ * tickets/16. By default the order is still the Bayes action for that
+ * objective — highest posterior mean first — because that is what "maximise the
+ * hit probability" literally asks for, noise or not. A caller who would rather
+ * spend the indifference on something measurable can ask for "least-played",
+ * which prefers the balls fewest people play at no cost to the hit probability.
  */
 export function planSuperCoverage(
   draws: Draw[],
@@ -159,10 +171,12 @@ export function planSuperCoverage(
     weights.length === SUPER_POOL &&
     weights.every((w) => Number.isFinite(w) && w > 0);
 
+  const tiebreak = opts.tiebreak ?? "posterior";
   let ranked: SuperPosterior[];
   let rule: SuperPlan["rule"];
-  if (separable.length > 0) {
-    // The evidence separates the balls, so the objective itself decides.
+  if (separable.length > 0 || tiebreak === "posterior") {
+    // Either the evidence separates the balls, or the caller wants the Bayes
+    // action for a pure hit objective regardless: highest posterior mean first.
     ranked = [...posterior].sort((a, b) => b.mean - a.mean);
     rule = "posterior";
   } else if (usable) {

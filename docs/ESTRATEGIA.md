@@ -66,13 +66,15 @@ Lo que sí es exacto es la cobertura: N súper balotas *distintas* aciertan
 con probabilidad N/16, sin suponer nada sobre la máquina. Uno 6,25 %, dos
 12,50 %, tres 18,75 %.
 
-Como el objetivo es indiferente entre las dieciséis, el desempate es gratis
-y va a la única cantidad medida: cuánta gente juega cada balota. Fuera de
-muestra, cubrir las tres menos jugadas contra las tres más jugadas da la
-misma tasa de acierto (14,8 % vs 19,4 %, ambas dentro de ±2σ de 18,8 %) y
-1,53× el premio por ganador en las categorías +SB, con 19 % menos
-co-ganadores. Una versión anterior de este modelo ordenaba por posterior y
-ponía primera la súper balota 7 — la más jugada del país. Corregido.
+Como el objetivo es indiferente entre las dieciséis, el orden entre ellas
+es un desempate. Por defecto va por posterior (la acción de Bayes para el
+objetivo tal como se planteó: probabilidad de acierto y nada más), sabiendo
+que la brecha es ruido. Hay una alternativa opcional, `--tiebreak crowd`,
+que gasta esa indiferencia en lo único medido: cuánta gente juega cada
+balota. Fuera de muestra, las tres menos jugadas contra las tres más
+jugadas dan la misma tasa de acierto (14,8 % vs 19,4 %, ambas dentro de
+±2σ de 18,8 %) y 1,53× el premio por ganador en las categorías +SB. Es un
+criterio de pago, y por eso no es el predeterminado.
 
 ## Lo que ninguna regla puede hacer
 
