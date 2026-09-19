@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build / cache
+dist/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.local
+
+# Local session & credentials (never commit these)
+.bancolombia/
+
+# Playwright storage state written during login
+storage-state.json
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

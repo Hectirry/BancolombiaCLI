@@ -1,0 +1,8 @@
+[install]
+# Use exact versions recorded in bun.lockb for reproducible installs.
+exact = false
+
+[run]
+# Silence the "$ command" banner that Bun prints before scripts, so the MCP
+# stdio transport (JSON-RPC over stdout) is never polluted with extra output.
+silent = true
