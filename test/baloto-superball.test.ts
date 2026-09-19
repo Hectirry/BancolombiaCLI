@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { planSuperCoverage, scoreSuperRules, superPosterior } from "../src/baloto/superball.ts";
+import { planSuperCoverage, scoreSuperRules, standardSuperRules, superPosterior } from "../src/baloto/superball.ts";
 import { makeRng, randInt, sampleDistinct } from "../src/baloto/random.ts";
 import { MAIN_PICK, MAIN_POOL, SUPER_POOL } from "../src/baloto/rules.ts";
 import type { Draw } from "../src/baloto/dataset.ts";
@@ -158,5 +158,32 @@ describe("scoreSuperRules", () => {
     })), 3, 400)[0]!;
     expect(crowded.z).toBeCloseTo(alone.z, 10);
     expect(crowded.beatsChance || !alone.beatsChance).toBe(true);
+  });
+});
+
+describe("standardSuperRules", () => {
+  const draws = history(900, 5);
+
+  test("every rule plays distinct balls, exactly as many as asked", () => {
+    const crowd = Array.from({ length: SUPER_POOL }, (_, i) => (i + 1) / 136);
+    for (const rule of standardSuperRules(1, crowd)) {
+      for (const n of [1, 3, 5]) {
+        const balls = rule.choose(draws.slice(0, 500), n);
+        expect(balls).toHaveLength(n);
+        expect(new Set(balls).size).toBe(n);
+        for (const b of balls) expect(b >= 1 && b <= SUPER_POOL).toBe(true);
+      }
+    }
+  });
+
+  test("leaves the crowd rule out when there is no crowd model", () => {
+    const names = standardSuperRules().map((r) => r.name);
+    expect(names.some((n) => n.includes("crowd"))).toBe(false);
+    expect(names.length).toBeGreaterThanOrEqual(8);
+  });
+
+  test("none of the folk systems beats chance on a fair machine", () => {
+    const scores = scoreSuperRules(draws, standardSuperRules(), 3, 400);
+    expect(scores.every((s) => !s.beatsChance)).toBe(true);
   });
 });

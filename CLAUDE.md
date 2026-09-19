@@ -27,10 +27,11 @@ Rules that follow from that objective, all of them measured:
    *distinct* Súper Balotas hit with probability exactly N/16 — 6.25 %,
    12.5 %, 18.75 %, 25 % … 100 % at sixteen. This holds with no assumption
    about the machine. Never repeat a ball across tickets.
-3. **No selection rule beats that.** A walk-forward tournament over 564 draws
-   (`scoreSuperRules`) tried highest posterior, lowest posterior, avoid the
+3. **No selection rule beats that.** A walk-forward tournament over 567 draws
+   (`scoreSuperRules` over `standardSuperRules`) has tried highest posterior,
+   lowest posterior, hot-last-100, most overdue, Markov successors, avoid the
    recent, repeat the recent, fixed 1-2-3 and least-played: every one lands
-   inside the noise band around N/16 (best z = +1.54 with six comparisons).
+   inside the noise band around N/16 (best z = +1.58 with nine comparisons).
    No ball is distinguishable from 1/16 once all sixteen intervals are read
    simultaneously (`SIMULTANEOUS_Z`). Any new rule must be entered in that
    tournament and clear its Bonferroni threshold before it changes a

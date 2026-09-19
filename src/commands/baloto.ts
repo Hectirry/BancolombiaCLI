@@ -902,7 +902,7 @@ export async function superCommand(opts: {
   const tickets = opts.tickets ? Number.parseInt(opts.tickets, 10) : 3;
   const priorStrength = opts.prior ? Number(opts.prior) : 1;
 
-  const { planSuperCoverage, scoreSuperRules, superPosterior } = await import(
+  const { planSuperCoverage, scoreSuperRules, standardSuperRules, superPosterior } = await import(
     "../baloto/superball.ts"
   );
   const { model } = await loadBiasModel(game);
@@ -912,51 +912,7 @@ export async function superCommand(opts: {
 
   // 1. Does anything predict the ball at all?
   const warmup = opts.warmup ? Number.parseInt(opts.warmup, 10) : 400;
-  const rules = [
-    {
-      name: "highest posterior (hot)",
-      choose: (past: typeof draws, n: number) =>
-        superPosterior(past, priorStrength)
-          .sort((a, b) => b.mean - a.mean)
-          .slice(0, n)
-          .map((p) => p.ball),
-    },
-    {
-      name: "lowest posterior (cold)",
-      choose: (past: typeof draws, n: number) =>
-        superPosterior(past, priorStrength)
-          .sort((a, b) => a.mean - b.mean)
-          .slice(0, n)
-          .map((p) => p.ball),
-    },
-    {
-      name: "avoid the last three drawn",
-      choose: (past: typeof draws, n: number) => {
-        const recent = new Set(past.slice(-3).map((d) => d.super));
-        return Array.from({ length: SUPER_POOL }, (_, i) => i + 1)
-          .filter((b) => !recent.has(b))
-          .slice(0, n);
-      },
-    },
-    {
-      name: "repeat the last three drawn",
-      choose: (past: typeof draws, n: number) =>
-        [...new Set(past.slice(-6).map((d) => d.super))].slice(0, n),
-    },
-    {
-      name: "fixed 1-2-3",
-      choose: (_: typeof draws, n: number) => [1, 2, 3].slice(0, n),
-    },
-    {
-      name: "least played by the crowd",
-      choose: (_: typeof draws, n: number) =>
-        model.super
-          .map((w, i) => ({ ball: i + 1, w }))
-          .sort((a, b) => a.w - b.w)
-          .slice(0, n)
-          .map((x) => x.ball),
-    },
-  ];
+  const rules = standardSuperRules(priorStrength, model.super);
   const scores = scoreSuperRules(draws, rules, tickets, warmup);
   const base = tickets / SUPER_POOL;
   console.log(

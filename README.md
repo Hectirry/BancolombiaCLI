@@ -241,6 +241,12 @@ comparisons on the table.
 | fixed 1-2-3 | 92/564 | 16.3 % | −1.48 |
 | least played by the crowd | 92/564 | 16.3 % | −1.48 |
 
+Three more folk systems were entered later, on 567 draws, and landed the same
+way: hot over the last 100 (18.7 %, z = −0.03), most overdue (17.5 %,
+z = −0.79) and Markov successors of the last ball (17.5 %, z = −0.79). The set
+lives in `standardSuperRules` so that every future idea is scored against the
+same bar instead of a fresh one.
+
 Nothing predicts the ball. What *is* exact is the coverage arithmetic: N
 **distinct** Súper Balotas are mutually exclusive events, so they hit with
 probability N/16 — 6.25 %, 12.50 %, 18.75 % — with no assumption about the

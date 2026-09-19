@@ -212,6 +212,84 @@ export interface SuperRule {
   choose: (past: Draw[], tickets: number) => number[];
 }
 
+const allBalls = (): number[] => Array.from({ length: SUPER_POOL }, (_, i) => i + 1);
+const topBy = (score: (ball: number) => number, n: number, ascending = false): number[] =>
+  allBalls()
+    .map((ball) => ({ ball, score: score(ball) }))
+    .sort((a, b) => (ascending ? a.score - b.score : b.score - a.score))
+    .slice(0, n)
+    .map((x) => x.ball);
+
+/**
+ * The rules the tournament always enters, so the record accumulates instead
+ * of being re-derived from scratch each time someone has a new idea. Every
+ * folk system that has been proposed for the Súper Balota is here: hot, cold,
+ * overdue, recent, Markov successors, a fixed pick, and the crowd's least
+ * favourite. When `superWeights` is absent the crowd rule is left out.
+ */
+export function standardSuperRules(priorStrength = 1, superWeights?: number[]): SuperRule[] {
+  const posterior = (past: Draw[]) => superPosterior(past, priorStrength);
+  const rules: SuperRule[] = [
+    {
+      name: "highest posterior (hot)",
+      choose: (past, n) => topBy((b) => posterior(past)[b - 1]!.mean, n),
+    },
+    {
+      name: "lowest posterior (cold)",
+      choose: (past, n) => topBy((b) => posterior(past)[b - 1]!.mean, n, true),
+    },
+    {
+      name: "hot over the last 100",
+      choose: (past, n) => {
+        const counts = new Array<number>(SUPER_POOL).fill(0);
+        for (const d of past.slice(-100)) counts[d.super - 1]!++;
+        return topBy((b) => counts[b - 1]!, n);
+      },
+    },
+    {
+      name: "most overdue",
+      choose: (past, n) => {
+        const lastSeen = new Array<number>(SUPER_POOL).fill(-1);
+        past.forEach((d, i) => (lastSeen[d.super - 1] = i));
+        return topBy((b) => lastSeen[b - 1]!, n, true);
+      },
+    },
+    {
+      name: "Markov: successors of the last",
+      choose: (past, n) => {
+        const last = past[past.length - 1]?.super;
+        const counts = new Array<number>(SUPER_POOL).fill(0);
+        for (let i = 1; i < past.length; i++) {
+          if (past[i - 1]!.super === last) counts[past[i]!.super - 1]!++;
+        }
+        return topBy((b) => counts[b - 1]!, n);
+      },
+    },
+    {
+      name: "avoid the last three drawn",
+      choose: (past, n) => {
+        const recent = new Set(past.slice(-3).map((d) => d.super));
+        return allBalls().filter((b) => !recent.has(b)).slice(0, n);
+      },
+    },
+    {
+      name: "repeat the last drawn",
+      choose: (past, n) => [...new Set(past.slice(-6).map((d) => d.super))].slice(0, n),
+    },
+    {
+      name: "fixed 1-2-3",
+      choose: (_, n) => allBalls().slice(0, n),
+    },
+  ];
+  if (superWeights && superWeights.length === SUPER_POOL) {
+    rules.push({
+      name: "least played by the crowd",
+      choose: (_, n) => topBy((b) => superWeights[b - 1]!, n, true),
+    });
+  }
+  return rules;
+}
+
 export interface SuperRuleScore {
   name: string;
   hits: number;
