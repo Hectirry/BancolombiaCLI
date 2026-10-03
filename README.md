@@ -221,7 +221,35 @@ bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto realized                 # selection rule backtested in actually-paid pesos
 bancolombia baloto pick -n 5                # combinations the crowd avoids
 bancolombia baloto super -n 3 --typical     # maximise P(hit the Súper Balota), and nothing else
+bancolombia baloto algorithms               # Markov, affinity, k-NN, delta, logistic, periodogram — walk-forward
 ```
+
+### "Have you tried machine learning?" — walk-forward, yes
+
+`baloto algorithms` takes every predictor that sounds like statistics and
+scores it the only honest way: each one sees nothing but the draws before the
+one it bets on, over 673 real draws, against the 0.5814 matches per ticket a
+blind guess earns.
+
+| Algorithm | Matches/ticket | z | What it does |
+| --- | --- | --- | --- |
+| neighbours | 0.6033 | +0.79 | what followed the 25 past draws most like the last |
+| markov | 0.5914 | +0.38 | numbers that most often followed the ones just drawn |
+| random | 0.5864 | +0.19 | the baseline |
+| delta | 0.5849 | +0.13 | replay a past gap pattern from a new start |
+| affinity | 0.5706 | −0.41 | greedy set of numbers that co-occur most |
+| ensemble | 0.5587 | −0.90 | majority vote of the five below/above |
+| logistic | 0.5557 | −1.00 | per-ball regression on gap, recent frequency, last draw |
+| periodic | 0.5394 | −1.63 | each ball's dominant cycle, projected one step ahead |
+
+Nothing clears ±2. The logistic regression's fitted coefficients are all
+within ±0.01 of zero — it learned, correctly, that none of the features carry
+information. Fisher's g-test on each ball's on/off series finds no significant
+cycle once the threshold is spread over 43 balls (sharpest: ball 33 at a
+2.9-draw period, p = 0.011 against a 0.0012 threshold). The same two ideas were
+entered in the Súper Balota tournament and landed at z = −1.22 and +1.34. If a
+row ever clears ±2 on fresh data, that is news; until then they are ways of
+guessing with extra steps.
 
 ### Súper Balota: six rules tried, none of them work — and one that does not need to
 

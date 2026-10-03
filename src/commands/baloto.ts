@@ -912,7 +912,8 @@ export async function superCommand(opts: {
 
   // 1. Does anything predict the ball at all?
   const warmup = opts.warmup ? Number.parseInt(opts.warmup, 10) : 400;
-  const rules = standardSuperRules(priorStrength, model.super);
+  const { algorithmSuperRules } = await import("../baloto/algorithms.ts");
+  const rules = [...standardSuperRules(priorStrength, model.super), ...algorithmSuperRules()];
   const scores = scoreSuperRules(draws, rules, tickets, warmup);
   const base = tickets / SUPER_POOL;
   console.log(
@@ -1018,6 +1019,107 @@ export async function superCommand(opts: {
     c.yellow(
       `  ${pct(plan.hitProbability)} is the probability of hitting the Súper Balota, not of winning the jackpot.\n` +
         "  The jackpot still needs all five main numbers as well, at 1 in 962 598.",
+    ),
+  );
+}
+
+
+/**
+ * `baloto algorithms` — the "but have you tried machine learning?" command.
+ *
+ * Every algorithm that sounds like statistics is run walk-forward beside the
+ * folk systems and scored on matches per ticket against 5·5/43. Then the
+ * periodicity question gets its own exact test.
+ */
+export async function algorithmsCommand(opts: {
+  game?: string;
+  warmup?: string;
+  repeats?: string;
+}): Promise<void> {
+  const game = parseGame(opts.game);
+  const dataset = await requireDataset();
+  const draws = drawsFor(dataset, game);
+  const warmup = opts.warmup ? Number.parseInt(opts.warmup, 10) : 300;
+  const repeats = opts.repeats ? Number.parseInt(opts.repeats, 10) : 3;
+
+  const { algorithmStrategies, algorithmSuperRules, periodograms, fitLogistic, describeLogistic, CHANCE_MATCHES } =
+    await import("../baloto/algorithms.ts");
+  const { scoreSuperRules, standardSuperRules } = await import("../baloto/superball.ts");
+
+  console.log(c.bold(`Prediction algorithms — ${draws.length.toLocaleString("es-CO")} draws of ${game}`));
+  console.log(
+    c.dim(
+      `  Walk-forward from draw ${warmup}: each algorithm sees only the draws before the one it bets on.\n` +
+        `  A blind guess matches ${CHANCE_MATCHES.toFixed(4)} numbers per ticket; anything inside ±2 z is that.`,
+    ),
+  );
+  console.log("");
+
+  const strategies = [...defaultStrategies().filter((s) => s.id === "random"), ...algorithmStrategies()];
+  const report = backtest(draws, strategies, warmup, repeats);
+  console.log(
+    table(
+      ["ALGORITHM", "MATCHES/TICKET", "Z", "PRIZES", "WHAT IT DOES"],
+      [...report.results]
+        .sort((a, b) => b.meanMatches - a.meanMatches)
+        .map((r) => [
+          r.id,
+          r.meanMatches.toFixed(4),
+          `${r.z >= 0 ? "+" : ""}${r.z.toFixed(2)}`,
+          String(r.prizesWon),
+          r.description,
+        ]),
+    ),
+  );
+  console.log("");
+
+  const model = fitLogistic(draws);
+  console.log(
+    c.dim(
+      "  Logistic coefficients (log-odds per unit): " +
+        describeLogistic(model)
+          .map((x) => `${x.feature} ${x.weight >= 0 ? "+" : ""}${x.weight.toFixed(3)}`)
+          .join("  "),
+    ),
+  );
+  console.log("");
+
+  const spectra = periodograms(draws);
+  const significant = spectra.filter((p) => p.significant);
+  const sharpest = [...spectra].sort((a, b) => a.pValue - b.pValue)[0];
+  console.log(c.bold("  Periodicity (Fisher's g on each ball's on/off series)"));
+  if (significant.length === 0) {
+    console.log(
+      c.dim(
+        `  No ball has a significant cycle once the threshold is spread over ${spectra.length} balls` +
+          (sharpest
+            ? ` — the sharpest is ball ${sharpest.ball} at a ${sharpest.period.toFixed(1)}-draw period, p = ${sharpest.pValue.toFixed(3)}.`
+            : "."),
+      ),
+    );
+  } else {
+    console.log(
+      c.yellow(
+        `  Significant cycles: ${significant.map((p) => `ball ${p.ball} (period ${p.period.toFixed(1)})`).join(", ")}`,
+      ),
+    );
+  }
+  console.log("");
+
+  const superScores = scoreSuperRules(draws, [...standardSuperRules(1), ...algorithmSuperRules()], 3, 400);
+  const added = superScores.slice(-2);
+  console.log(c.bold("  The same ideas on the Súper Balota (3 distinct balls, 18.75 % expected)"));
+  for (const s of added) {
+    console.log(
+      c.dim(`  ${s.name}: ${s.hits}/${s.draws} = ${pct(s.rate)}, z = ${s.z >= 0 ? "+" : ""}${s.z.toFixed(2)}`) +
+        (s.beatsChance ? c.green("  real") : c.dim("  noise")),
+    );
+  }
+  console.log("");
+  console.log(
+    c.yellow(
+      "  Every one of these is a legitimate algorithm and every one is scored honestly.\n" +
+        "  If a row ever clears ±2 z on fresh data, that is news; until then they are ways of guessing.",
     ),
   );
 }

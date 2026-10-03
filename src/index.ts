@@ -236,6 +236,17 @@ baloto
   });
 
 baloto
+  .command("algorithms")
+  .description("Walk-forward test of Markov, affinity, k-NN, delta, logistic and periodogram predictors")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("--warmup <number>", "Draws reserved before scoring starts", "300")
+  .option("--repeats <number>", "Backtest repeats, for the random strategies", "3")
+  .action(async (opts: Record<string, string>) => {
+    const { algorithmsCommand } = await import("./commands/baloto.ts");
+    await algorithmsCommand(opts as never);
+  });
+
+baloto
   .command("super")
   .description("Maximise the chance of hitting the Súper Balota, and nothing else")
   .option("-g, --game <game>", "baloto or revancha", "baloto")
