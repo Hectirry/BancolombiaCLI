@@ -259,7 +259,9 @@ describe("pickTickets", () => {
   });
 
   test("with maxOverlap 0 the tickets share no number at all", () => {
-    const picks = pickTickets(model, { count: 3, pool: 2000, seed: 7, maxOverlap: 0, typical: true });
+    // A pool wide enough to hold three pairwise-disjoint lines; the walk only
+    // relaxes the limit when the pool cannot satisfy it.
+    const picks = pickTickets(model, { count: 3, pool: 4000, seed: 7, maxOverlap: 0 });
     expect(picks).toHaveLength(3);
     const all = picks.flatMap((p) => p.ticket.main);
     expect(new Set(all).size).toBe(all.length);

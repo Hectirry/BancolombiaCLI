@@ -186,29 +186,45 @@ export function pickReport(model: BiasModel, options: PickOptions = {}): PickRep
   // Walk a shuffled pool rather than sampling with replacement, so the search
   // cannot stall on collisions. The least-played combinations are heavily
   // overlapping by construction — they are all drawn from the same dozen high
-  // balls — so the diversity rule is relaxed rather than allowed to return
-  // fewer tickets than asked for.
+  // balls — so a greedy pass can paint itself into a corner: the first two
+  // lines it accepts may leave no third line in the pool that clears the
+  // overlap limit, even though another pair would have. Each limit therefore
+  // gets several shuffled attempts before the diversity rule is relaxed, and
+  // the rule is relaxed rather than allowed to return fewer tickets than asked.
   const order = ranked.map((_, i) => i);
-  for (let i = order.length - 1; i > 0; i--) {
-    const j = randInt(rng, i + 1);
-    [order[i], order[j]] = [order[j]!, order[i]!];
-  }
-
-  const picked: PickedTicket[] = [];
-  for (let limit = maxOverlap; limit <= MAIN_PICK && picked.length < count; limit++) {
+  const shuffle = () => {
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = randInt(rng, i + 1);
+      [order[i], order[j]] = [order[j]!, order[i]!];
+    }
+  };
+  const greedy = (base: PickedTicket[], limit: number): PickedTicket[] => {
+    const out = [...base];
     for (const index of order) {
-      if (picked.length >= count) break;
+      if (out.length >= count) break;
       const candidate = ranked[index]!;
-      if (picked.some((p) => p.rank === index + 1)) continue;
-      if (picked.some((p) => overlap(p.ticket.main, candidate.main) > limit)) continue;
-
+      if (out.some((p) => p.rank === index + 1)) continue;
+      if (out.some((p) => overlap(p.ticket.main, candidate.main) > limit)) continue;
       const superBall = superOrder[randInt(rng, Math.min(3, superOrder.length))]!.number;
-      picked.push({
+      out.push({
         ticket: { main: candidate.main, super: superBall },
         popularityRatio: ratioOf(candidate.main, superBall),
         rank: index + 1,
       });
     }
+    return out;
+  };
+
+  const ATTEMPTS_PER_LIMIT = 12;
+  let picked: PickedTicket[] = [];
+  for (let limit = maxOverlap; limit <= MAIN_PICK && picked.length < count; limit++) {
+    let best = picked;
+    for (let attempt = 0; attempt < ATTEMPTS_PER_LIMIT && best.length < count; attempt++) {
+      shuffle();
+      const found = greedy(picked, limit);
+      if (found.length > best.length) best = found;
+    }
+    picked = best;
   }
   picked.sort((a, b) => a.popularityRatio - b.popularityRatio);
 

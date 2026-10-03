@@ -305,7 +305,26 @@ export function standardSuperRules(priorStrength = 1, superWeights?: number[]): 
     },
     {
       name: "repeat the last drawn",
-      choose: (past, n) => [...new Set(past.slice(-6).map((d) => d.super))].slice(0, n),
+      // Most recent first: a Set keeps first-insertion order, so the slice has
+      // to be reversed before it is deduplicated or n = 1 plays the oldest.
+      choose: (past, n) => [...new Set(past.slice(-6).reverse().map((d) => d.super))].slice(0, n),
+    },
+    {
+      // Entered 2026-10-03 after a streak review found a ball seen twice or
+      // more in the last four repeating 9.6 % of the time against 6.25 %
+      // (z = +2.56 before correcting for the ~40 cells inspected, absent in
+      // 2018–2021 and in Revancha). Not evidence; scored here so it becomes
+      // evidence or dies in public.
+      name: "persist: seen twice in the last four",
+      choose: (past, n) => {
+        const counts = new Array<number>(SUPER_POOL + 1).fill(0);
+        for (const d of past.slice(-4)) counts[d.super]!++;
+        const persistent = allBalls().filter((b) => counts[b]! >= 2);
+        const rest = topBy((b) => posterior(past)[b - 1]!.mean, SUPER_POOL).filter(
+          (b) => !persistent.includes(b),
+        );
+        return [...persistent, ...rest].slice(0, n);
+      },
     },
     {
       name: "fixed 1-2-3",

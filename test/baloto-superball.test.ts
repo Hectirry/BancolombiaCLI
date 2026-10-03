@@ -183,6 +183,20 @@ describe("standardSuperRules", () => {
     }
   });
 
+  test("'repeat the last drawn' really plays the most recent ball first", () => {
+    const rule = standardSuperRules().find((r) => r.name === "repeat the last drawn")!;
+    const tail = draws.slice(0, 500);
+    expect(rule.choose(tail, 1)).toEqual([tail[tail.length - 1]!.super]);
+  });
+
+  test("'persist' plays the balls seen twice in the last four, then fills by posterior", () => {
+    const rule = standardSuperRules().find((r) => r.name.startsWith("persist"))!;
+    const tail = [...draws.slice(0, 496), ...draws.slice(0, 4).map((d) => ({ ...d, super: 9 }))];
+    const balls = rule.choose(tail, 3);
+    expect(balls[0]).toBe(9);
+    expect(new Set(balls).size).toBe(3);
+  });
+
   test("leaves the crowd rule out when there is no crowd model", () => {
     const names = standardSuperRules().map((r) => r.name);
     expect(names.some((n) => n.includes("crowd"))).toBe(false);

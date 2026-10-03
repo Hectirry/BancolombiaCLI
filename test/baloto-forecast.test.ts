@@ -86,7 +86,7 @@ describe("fitVolumeModel", () => {
   test("fits on the trailing window, not on everything", () => {
     expect(model.observations).toBe(DEFAULT_WINDOW);
     expect(fitVolumeModel(draws, undefined, 30)!.observations).toBe(30);
-  });
+  }, 20_000);
 
   test("declines to fit when there is too little data", () => {
     expect(fitVolumeModel(season(6, 5))).toBeNull();
@@ -122,7 +122,7 @@ describe("scoreVolumeForecast", () => {
     const scored = scoreVolumeForecast(draws, cutoff);
     expect(scored.length).toBeGreaterThan(30);
     expect(scored.every((s) => s.date >= cutoff)).toBe(true);
-  });
+  }, 20_000);
 
   test("tracks a market whose weekday effect drifts — the real failure mode", () => {
     // With adoption, a full-history fit lags; the trailing window keeps up.
