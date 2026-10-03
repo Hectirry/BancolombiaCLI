@@ -1,5 +1,12 @@
 import { expect, test, describe } from "bun:test";
-import { planSuperCoverage, scoreSuperRules, standardSuperRules, superPosterior } from "../src/baloto/superball.ts";
+import {
+  atLeastThreeMain,
+  planSuperCoverage,
+  scoreSuperRules,
+  standardSuperRules,
+  superPosterior,
+  winAnythingProbability,
+} from "../src/baloto/superball.ts";
 import { makeRng, randInt, sampleDistinct } from "../src/baloto/random.ts";
 import { MAIN_PICK, MAIN_POOL, SUPER_POOL } from "../src/baloto/rules.ts";
 import type { Draw } from "../src/baloto/dataset.ts";
@@ -185,5 +192,22 @@ describe("standardSuperRules", () => {
   test("none of the folk systems beats chance on a fair machine", () => {
     const scores = scoreSuperRules(draws, standardSuperRules(), 3, 400);
     expect(scores.every((s) => !s.beatsChance)).toBe(true);
+  });
+});
+
+describe("winAnythingProbability", () => {
+  test("one ticket reaches three main matches in 7 221 of 962 598 ways", () => {
+    expect(atLeastThreeMain() * 962_598).toBeCloseTo(7_221, 6);
+  });
+
+  test("three disjoint tickets with distinct Súper Balotas: 3 169 413 / 15 401 568", () => {
+    expect(winAnythingProbability(3)).toBeCloseTo(3_169_413 / 15_401_568, 12);
+  });
+
+  test("grows with tickets and never exceeds certainty", () => {
+    expect(winAnythingProbability(1)).toBeLessThan(winAnythingProbability(2));
+    expect(winAnythingProbability(2)).toBeLessThan(winAnythingProbability(3));
+    expect(winAnythingProbability(16)).toBe(1);
+    expect(winAnythingProbability(0)).toBe(0);
   });
 });

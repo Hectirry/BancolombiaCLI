@@ -41,7 +41,7 @@
  * the machine at all.
  */
 
-import { SUPER_POOL } from "./rules.ts";
+import { MAIN_PICK, MAIN_POOL, SUPER_POOL } from "./rules.ts";
 import type { Draw } from "./dataset.ts";
 
 /**
@@ -203,6 +203,37 @@ export function planSuperCoverage(
     rule,
     crowding,
   };
+}
+
+/** Binomial coefficient, exact for the small arguments used here. */
+function choose(n: number, k: number): number {
+  if (k < 0 || k > n) return 0;
+  let r = 1;
+  for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i;
+  return Math.round(r);
+}
+
+/** Probability one ticket matches at least three of the five main numbers. */
+export function atLeastThreeMain(): number {
+  const total = choose(MAIN_POOL, MAIN_PICK);
+  let ways = 0;
+  for (let k = 3; k <= MAIN_PICK; k++) ways += choose(MAIN_PICK, k) * choose(MAIN_POOL - MAIN_PICK, MAIN_PICK - k);
+  return ways / total;
+}
+
+/**
+ * Exact probability that at least one of `tickets` wins *anything*, when they
+ * carry distinct Súper Balotas and share no main number. A prize needs either
+ * the Súper Balota or three main matches; with disjoint tickets the "three
+ * matches" events are mutually exclusive (two would need six drawn balls), so
+ * their probabilities add, and that is the most any arrangement can reach.
+ * This is a hit criterion, not a payout one: it says nothing about prize size.
+ */
+export function winAnythingProbability(tickets: number): number {
+  const n = Math.max(0, Math.min(tickets, SUPER_POOL));
+  const superHit = n / SUPER_POOL;
+  const mainHit = Math.min(1, n * atLeastThreeMain());
+  return 1 - (1 - superHit) * (1 - mainHit);
 }
 
 /** One candidate way of choosing which Súper Balotas to cover. */

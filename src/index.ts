@@ -255,6 +255,7 @@ baloto
   .option("--tiebreak <rule>", "Order among equally likely balls: posterior (default) or crowd", "posterior")
   .option("--warmup <number>", "Draws reserved before the rule tournament scores", "400")
   .option("--typical", "Only main numbers shaped like a plausible real result")
+  .option("--coverage <fraction>", "How strictly 'typical' is read: 0.5 = the interquartile range of real draws, 0.8 = looser", "0.8")
   .option("--seed <number>", "Seed, for reproducible tickets")
   .action(async (opts: Record<string, string>) => {
     const { superCommand } = await import("./commands/baloto.ts");

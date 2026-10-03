@@ -258,6 +258,13 @@ describe("pickTickets", () => {
     }
   });
 
+  test("with maxOverlap 0 the tickets share no number at all", () => {
+    const picks = pickTickets(model, { count: 3, pool: 2000, seed: 7, maxOverlap: 0, typical: true });
+    expect(picks).toHaveLength(3);
+    const all = picks.flatMap((p) => p.ticket.main);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
   test("the same seed gives the same tickets", () => {
     const a = pickTickets(model, { count: 3, pool: 60, seed: 99 });
     const b = pickTickets(model, { count: 3, pool: 60, seed: 99 });

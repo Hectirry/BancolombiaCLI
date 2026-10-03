@@ -43,9 +43,14 @@ Rules that follow from that objective, all of them measured:
    objective, and the report must say in the same breath that the gap is
    inside noise. `--tiebreak crowd` (least-played balls) is opt-in only,
    because it is a payout criterion — it never becomes the default.
-5. **The five main numbers are free.** The Súper Balota objective does not
-   constrain them. They are filled from `pick` so that a hit is at least a
-   sensible ticket, and the report says they are free.
+5. **The five main numbers are free, and disjoint across tickets.** The
+   Súper Balota objective does not constrain them. They are filled from
+   `pick` with `maxOverlap: 0`: two tickets can only both reach three matches
+   if they share numbers, so sharing none makes those events exclusive and
+   "win anything" reaches its exact maximum (20.58 % with 3 tickets, against
+   20.49 % at overlap 2 and 19.36 % for three copies —
+   `winAnythingProbability`). That is a hit criterion, not a payout one. The
+   report says the main numbers are free.
 
 When asked for "combinaciones para hoy", run
 `bun src/index.ts baloto super -n 3 --typical --seed <n>` and report the

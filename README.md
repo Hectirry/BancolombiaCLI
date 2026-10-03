@@ -289,7 +289,11 @@ hit rate is statistically identical (14.8 % vs 19.4 %, both within 2σ of
 18.75 %) while the +Súper tiers pay 1.53× more per winner on 19 % fewer
 co-winners. That is a payout criterion, which is why it is opt-in. The five
 main numbers are left to `pick`, because the Súper-Balota objective does not
-constrain them.
+constrain them — with one exact rule: the tickets share no main number. Two
+tickets can only both reach three matches if they share numbers, so disjoint
+tickets make those events exclusive and "win anything" hits its ceiling:
+20.58 % with three tickets, against 20.49 % at overlap 2 and 19.36 % for three
+copies of the same line (3 169 413 / 15 401 568, exact).
 
 ### The backtest that found a 19 % error: prizes are funded net of VAT
 

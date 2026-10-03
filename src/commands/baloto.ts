@@ -894,6 +894,7 @@ export async function superCommand(opts: {
   tiebreak?: string;
   warmup?: string;
   typical?: boolean;
+  coverage?: string;
   seed?: string;
 }): Promise<void> {
   const game = parseGame(opts.game);
@@ -902,9 +903,8 @@ export async function superCommand(opts: {
   const tickets = opts.tickets ? Number.parseInt(opts.tickets, 10) : 3;
   const priorStrength = opts.prior ? Number(opts.prior) : 1;
 
-  const { planSuperCoverage, scoreSuperRules, standardSuperRules, superPosterior } = await import(
-    "../baloto/superball.ts"
-  );
+  const { planSuperCoverage, scoreSuperRules, standardSuperRules, superPosterior, winAnythingProbability } =
+    await import("../baloto/superball.ts");
   const { model } = await loadBiasModel(game);
 
   console.log(c.bold(`Súper Balota — ${draws.length.toLocaleString("es-CO")} draws of ${game}`));
@@ -984,11 +984,18 @@ export async function superCommand(opts: {
   console.log(c.dim(`  Balls ${plan.balls.join(", ")}, ${order}.`));
   console.log("");
 
+  // Disjoint main numbers are the exact optimum for "win anything" with N
+  // tickets: two tickets can only both reach three matches if they share
+  // numbers, so sharing none makes the events exclusive and their
+  // probabilities add. Worth 20.58 % against 20.49 % at overlap 2 — small,
+  // free, and a hit criterion rather than a payout one.
   const { pickReport } = await import("../baloto/pick.ts");
   const report = pickReport(model, {
     count: tickets,
-    pool: 400,
+    pool: 2000,
+    maxOverlap: 0,
     typical: opts.typical === true,
+    typicalCoverage: opts.coverage ? Number(opts.coverage) : 0.8,
     seed: opts.seed ? Number.parseInt(opts.seed, 10) : undefined,
   });
   // The crowd column is a payout figure; it only appears when the caller
@@ -1007,11 +1014,22 @@ export async function superCommand(opts: {
     table(showCrowd ? ["MAIN NUMBERS", "SÚPER", "CROWD ON THAT SÚPER"] : ["MAIN NUMBERS", "SÚPER"], rows),
   );
   console.log("");
+  const shared = new Set<number>();
+  let disjoint = true;
+  for (const t of report.tickets) {
+    for (const n of t.ticket.main) {
+      if (shared.has(n)) disjoint = false;
+      shared.add(n);
+    }
+  }
   console.log(
     c.dim(
       "  The five main numbers are free: the objective above does not constrain them,\n" +
-        "  so they are taken from the least-played combinations. A Súper Balota hit pays\n" +
-        "  something at any number of main matches, so every hit is a winning ticket.",
+        "  so they are taken from the least-played combinations" +
+        (disjoint
+          ? `, sharing no number across\n  tickets — the exact optimum for winning anything with ${tickets} tickets: ${pct(winAnythingProbability(tickets))}.`
+          : ".") +
+        "\n  A Súper Balota hit pays something at any number of main matches, so every hit is a winning ticket.",
     ),
   );
   console.log("");
