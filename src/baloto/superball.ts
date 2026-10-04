@@ -41,7 +41,7 @@
  * the machine at all.
  */
 
-import { MAIN_PICK, MAIN_POOL, SUPER_POOL } from "./rules.ts";
+import { ECONOMICS, MAIN_PICK, MAIN_POOL, SUPER_POOL } from "./rules.ts";
 import type { Draw } from "./dataset.ts";
 
 /**
@@ -234,6 +234,69 @@ export function winAnythingProbability(tickets: number): number {
   const superHit = n / SUPER_POOL;
   const mainHit = Math.min(1, n * atLeastThreeMain());
   return 1 - (1 - superHit) * (1 - mainHit);
+}
+
+/**
+ * What a night buys: the same tickets against every draw they take part in.
+ *
+ * Revancha is a second, complete draw the same night — five of 43 and one of
+ * 16 from its own machines — in which the ticket's numbers play again. The two
+ * draws are independent (`regime`: 16×16 permutation χ² p = 0.25 over 975
+ * nights), so a ticket with Revancha gets two tries at its Súper Balota and
+ * hits at least once with probability 1 − (15/16)² = 31/256 instead of 1/16.
+ * With `tickets` distinct balls the night hits with 1 − (1 − tickets/16)²:
+ * 23.44 % for two tickets with Revancha against 18.75 % for three without —
+ * the same $18.000. That is coverage, exactly as rule 2 is coverage: more
+ * draws per ticket instead of more tickets per draw, and it needs no
+ * assumption about either machine.
+ *
+ * Per peso, Revancha buys more Súper Balota hit than extra tickets do while
+ * 1 − (1 − n/16)² > 1.5n/16, i.e. n(8 − n) > 0: up to seven tickets with
+ * Revancha. At eight the two routes tie (75 %); beyond that distinct balls
+ * on more tickets win, because a sixteenth ball is a certainty and a second
+ * draw never is. Nothing here is about what a hit pays.
+ */
+export interface NightCoverage {
+  tickets: number;
+  revancha: boolean;
+  /** Draws the tickets take part in that night: 1, or 2 with Revancha. */
+  draws: number;
+  /** P(some ticket matches the Súper Balota in at least one of the night's draws). */
+  superHit: number;
+  /** P(some ticket wins anything, in Baloto or in Revancha). */
+  winAnything: number;
+  /** What the night costs, in COP, at the current prices. */
+  cost: number;
+}
+
+/**
+ * Exact night probabilities for `tickets` tickets carrying distinct Súper
+ * Balotas and disjoint main numbers, with or without Revancha.
+ */
+export function nightCoverage(tickets: number, revancha: boolean): NightCoverage {
+  const n = Math.max(0, Math.floor(tickets));
+  const draws = revancha ? 2 : 1;
+  const superPerDraw = Math.min(n, SUPER_POOL) / SUPER_POOL;
+  const winPerDraw = winAnythingProbability(n);
+  return {
+    tickets: n,
+    revancha,
+    draws,
+    superHit: 1 - (1 - superPerDraw) ** draws,
+    winAnything: 1 - (1 - winPerDraw) ** draws,
+    cost: n * (ECONOMICS.ticketPrice + (revancha ? ECONOMICS.revanchaPrice : 0)),
+  };
+}
+
+/**
+ * The two ways of spending one budget: as many plain tickets as it buys, or
+ * as many tickets with Revancha. Whole tickets only, so each side may leave
+ * change; `cost` says how much was actually spent.
+ */
+export function nightCoverageForBudget(budget: number): { without: NightCoverage; withRevancha: NightCoverage } {
+  const plain = Math.floor(budget / ECONOMICS.ticketPrice);
+  const doubled = Math.floor(budget / (ECONOMICS.ticketPrice + ECONOMICS.revanchaPrice));
+  return { without: nightCoverage(plain, false), withRevancha: nightCoverage(doubled, true) };
 }
 
 /** One candidate way of choosing which Súper Balotas to cover. */
