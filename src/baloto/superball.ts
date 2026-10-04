@@ -221,19 +221,38 @@ export function atLeastThreeMain(): number {
   return ways / total;
 }
 
+/** How many tickets can still share no main number: ⌊43/5⌋ = 8. */
+export const MAX_DISJOINT_TICKETS = Math.floor(MAIN_POOL / MAIN_PICK);
+
 /**
- * Exact probability that at least one of `tickets` wins *anything*, when they
- * carry distinct Súper Balotas and share no main number. A prize needs either
- * the Súper Balota or three main matches; with disjoint tickets the "three
+ * Probability that at least one of `tickets` wins *anything*, when they carry
+ * distinct Súper Balotas and share no main number. A prize needs either the
+ * Súper Balota or three main matches; with disjoint tickets the "three
  * matches" events are mutually exclusive (two would need six drawn balls), so
  * their probabilities add, and that is the most any arrangement can reach.
- * This is a hit criterion, not a payout one: it says nothing about prize size.
+ *
+ * EXACT only for `tickets` ≤ 8: beyond that 5·N > 43 forces shared numbers,
+ * the events stop being exclusive, and this value is a strict UPPER BOUND (the
+ * union bound). The exact figure for a concrete arrangement, and the best
+ * arrangement found for a budget, live in `coverage.ts`
+ * (`winAnythingExact`, `optimiseCoverage`); `winAnythingBudget` says which of
+ * the two a number is. This is a hit criterion, not a payout one.
  */
 export function winAnythingProbability(tickets: number): number {
   const n = Math.max(0, Math.min(tickets, SUPER_POOL));
   const superHit = n / SUPER_POOL;
   const mainHit = Math.min(1, n * atLeastThreeMain());
   return 1 - (1 - superHit) * (1 - mainHit);
+}
+
+/**
+ * The budget curve with its honesty attached: exact for ≤ 8 tickets, an upper
+ * bound beyond — except at 16 or more tickets, where distinct Súper Balotas
+ * alone make the probability exactly one whatever the main numbers do.
+ */
+export function winAnythingBudget(tickets: number): { probability: number; exact: boolean } {
+  const probability = winAnythingProbability(tickets);
+  return { probability, exact: tickets <= MAX_DISJOINT_TICKETS || tickets >= SUPER_POOL };
 }
 
 /** One candidate way of choosing which Súper Balotas to cover. */
