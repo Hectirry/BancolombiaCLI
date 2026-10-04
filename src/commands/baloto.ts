@@ -935,15 +935,24 @@ export async function superCommand(opts: {
   coverage?: string;
   seed?: string;
   record?: boolean;
+  revancha?: boolean;
 }): Promise<void> {
   const game = parseGame(opts.game);
   const dataset = await requireDataset();
   const draws = drawsFor(dataset, game);
   const tickets = opts.tickets ? Number.parseInt(opts.tickets, 10) : 3;
   const priorStrength = opts.prior ? Number(opts.prior) : 1;
+  const revancha = opts.revancha === true;
 
-  const { planSuperCoverage, scoreSuperRules, standardSuperRules, superPosterior, winAnythingProbability } =
-    await import("../baloto/superball.ts");
+  const {
+    nightCoverage,
+    nightCoverageForBudget,
+    planSuperCoverage,
+    scoreSuperRules,
+    standardSuperRules,
+    superPosterior,
+    winAnythingProbability,
+  } = await import("../baloto/superball.ts");
   const { model } = await loadBiasModel(game);
 
   console.log(c.bold(`Súper Balota — ${draws.length.toLocaleString("es-CO")} draws of ${game}`));
@@ -1011,6 +1020,15 @@ export async function superCommand(opts: {
         `(${pct(plan.singleTicket)} on one)`,
     ),
   );
+  if (revancha) {
+    const night = nightCoverage(tickets, true);
+    console.log(
+      c.bold(
+        `  With Revancha the same tickets play the night's second draw: ${pct(night.superHit)} ` +
+          `that some ticket hits its Súper Balota at least once (${money(night.cost)} for the night)`,
+      ),
+    );
+  }
   const order =
     plan.rule === "posterior"
       ? plan.distinguishable.length > 0
@@ -1073,17 +1091,59 @@ export async function superCommand(opts: {
     ),
   );
   console.log("");
-  // The budget curve: the only lever that moves the objective is N, so show
-  // exactly what each extra ticket buys — in hit probability, nothing else.
+  // The budget curve: the levers that move the objective are N and the number
+  // of draws each ticket plays, so show exactly what each buys — in hit
+  // probability, nothing else. Revancha is a second complete draw the same
+  // night with the same numbers; independent of the first (regime: p = 0.25),
+  // so it is coverage of the same kind as distinct balls: 1 − (1 − N/16)².
   console.log(c.bold("  What each ticket buys (exact, fair machine, distinct Súper Balotas, disjoint numbers)"));
   console.log(
     table(
-      ["TICKETS", "P(SÚPER BALOTA)", "P(WIN ANYTHING)"],
-      [1, 2, 3, 4, 5, 6, 8].map((n) => [
-        String(n),
-        pct(n / SUPER_POOL),
-        pct(winAnythingProbability(n)) + (n > 8 ? " (best known arrangement)" : ""),
-      ]),
+      ["TICKETS", "COST", "P(SÚPER BALOTA)", "P(WIN ANYTHING)", "+REVANCHA", "P(SÚPER BALOTA)", "P(WIN ANYTHING)"],
+      [1, 2, 3, 4, 5, 6, 8].map((n) => {
+        const plain = nightCoverage(n, false);
+        const doubled = nightCoverage(n, true);
+        return [
+          String(n),
+          money(plain.cost),
+          pct(plain.superHit),
+          pct(plain.winAnything),
+          money(doubled.cost),
+          pct(doubled.superHit),
+          pct(doubled.winAnything),
+        ];
+      }),
+    ),
+  );
+  console.log("");
+  console.log(c.bold("  The same pesos, two ways: more tickets, or the same tickets in both draws"));
+  console.log(
+    table(
+      ["BUDGET", "WITHOUT REVANCHA", "P(SÚPER BALOTA)", "P(WIN ANYTHING)", "WITH REVANCHA", "P(SÚPER BALOTA)", "P(WIN ANYTHING)"],
+      [18_000, 36_000, 54_000, 72_000].map((budget) => {
+        const { without, withRevancha } = nightCoverageForBudget(budget);
+        const better = withRevancha.superHit > without.superHit;
+        // Past eight tickets the main numbers can no longer be disjoint
+        // (43/5), so "win anything" is a bound there, as in the table above.
+        return [
+          money(budget),
+          `${without.tickets} tickets`,
+          pct(without.superHit),
+          pct(without.winAnything) + (without.tickets > 8 ? " (bound)" : ""),
+          `${withRevancha.tickets} tickets`,
+          better ? c.green(pct(withRevancha.superHit)) : pct(withRevancha.superHit),
+          pct(withRevancha.winAnything),
+        ];
+      }),
+    ),
+  );
+  console.log("");
+  console.log(
+    c.dim(
+      "  Revancha is a second, complete draw (5 of 43 + 1 of 16) minutes later, with the same numbers,\n" +
+        "  independent of the first. Per peso it buys more Súper Balota coverage than extra tickets do\n" +
+        "  up to seven tickets, ties at eight (75 % either way) and loses beyond, where sixteen distinct\n" +
+        "  balls are a certainty and a second draw never is. Pass --revancha to plan and record it.",
     ),
   );
   console.log("");
@@ -1099,6 +1159,7 @@ export async function superCommand(opts: {
     const latest = draws[draws.length - 1]?.date;
     if (!latest) return;
     const target = nextDrawDate(latest);
+    const night = nightCoverage(report.tickets.length, revancha);
     const ledger = recordRecommendation(await loadLedger(), {
       recordedAt: new Date().toISOString(),
       targetDate: target,
@@ -1106,10 +1167,17 @@ export async function superCommand(opts: {
       model: `super/${plan.rule}`,
       tickets: report.tickets.map((t, i) => ({ main: t.ticket.main, super: plan.balls[i] ?? t.ticket.super })),
       note: `seed ${opts.seed ?? "none"}, typical ${opts.typical === true}`,
+      revancha,
+      cost: night.cost,
     });
     await saveLedger(ledger);
     console.log("");
-    console.log(c.green(`  Recorded for the ${target} draw. Score it afterwards with: bancolombia baloto score`));
+    console.log(
+      c.green(
+        `  Recorded for the ${target} draw${revancha ? " (Baloto and Revancha)" : ""}: ${money(night.cost)} staked ` +
+          `against a ${pct(night.superHit)} night. Score it afterwards with: bancolombia baloto score`,
+      ),
+    );
   }
 }
 
@@ -1121,8 +1189,9 @@ export async function superCommand(opts: {
 export async function scoreCommand(opts: { game?: string }): Promise<void> {
   const game = parseGame(opts.game);
   const dataset = await requireDataset();
-  const draws = drawsFor(dataset, game);
-  const { loadLedger, scoreLedger } = await import("../baloto/ledger.ts");
+  // Both games: a night that played Revancha is scored against both draws.
+  const draws = [...drawsFor(dataset, "baloto"), ...drawsFor(dataset, "revancha")];
+  const { detectableDeparture, loadLedger, nightsToDistinguish, scoreLedger } = await import("../baloto/ledger.ts");
   const ledger = await loadLedger();
   const score = scoreLedger({ entries: ledger.entries.filter((e) => e.game === game) }, draws);
 
@@ -1132,30 +1201,75 @@ export async function scoreCommand(opts: { game?: string }): Promise<void> {
     return;
   }
   console.log("");
+  const result = (d: { main: number[]; super: number }) =>
+    `${d.main.map((n) => String(n).padStart(2, "0")).join(" ")} + ${String(d.super).padStart(2, "0")}`;
+  const anyRevancha = score.scored.some((s) => s.companion !== null);
+  const nights = score.scored.length;
   console.log(
     table(
-      ["DRAW", "RESULT", "TICKETS (matches)", "SÚPER", "BEST TIER"],
-      score.scored.map((s) => [
-        s.draw.date,
-        `${s.draw.main.map((n) => String(n).padStart(2, "0")).join(" ")} + ${String(s.draw.super).padStart(2, "0")}`,
-        s.entry.tickets
-          .map((t, i) => `${t.main.map((n) => String(n).padStart(2, "0")).join(" ")}+${String(t.super).padStart(2, "0")} (${s.matches[i]})`)
-          .join("  "),
-        s.superHitTicket >= 0 ? c.green(`hit #${s.superHitTicket + 1}`) : c.dim("—"),
-        s.bestTier ?? c.dim("—"),
-      ]),
+      ["DRAW", "RESULT", "TICKETS (matches)", "SÚPER", "BEST TIER", ...(anyRevancha ? ["REVANCHA", "SÚPER", "TIER"] : [])],
+      score.scored.map((s) => {
+        const row = [
+          s.draw.date,
+          result(s.draw),
+          s.entry.tickets
+            .map((t, i) => `${t.main.map((n) => String(n).padStart(2, "0")).join(" ")}+${String(t.super).padStart(2, "0")} (${s.matches[i]})`)
+            .join("  "),
+          s.superHitTicket >= 0 ? c.green(`hit #${s.superHitTicket + 1}`) : c.dim("—"),
+          s.bestTier ?? c.dim("—"),
+        ];
+        if (anyRevancha) {
+          row.push(
+            s.companion ? result(s.companion.draw) : c.dim("not played"),
+            s.companion && s.companion.superHitTicket >= 0 ? c.green(`hit #${s.companion.superHitTicket + 1}`) : c.dim("—"),
+            s.companion?.bestTier ?? c.dim("—"),
+          );
+        }
+        return row;
+      }),
     ),
   );
   console.log("");
   console.log(
-    `  Súper Balota hits: ${score.superHits} of ${score.scored.length} draws; expected ${score.superExpected.toFixed(2)}` +
+    `  Súper Balota hits: ${score.superHits} of ${nights} nights; expected ${score.superExpected.toFixed(2)}` +
       (score.superPValue !== null ? `; two-sided exact p = ${score.superPValue.toFixed(3)}` : ""),
   );
-  console.log(`  Won anything: ${score.wins} of ${score.scored.length}.`);
+  console.log(`  Won anything: ${score.wins} of ${nights} nights.`);
+  // The stake side of the record: pesos per hit, against what the model
+  // implies. Not what a hit pays — how much it costs to be there when it comes.
+  console.log(
+    `  Staked: ${money(score.staked)} on ${score.tickets} tickets over ${nights} nights` +
+      (score.stakePerHit.observed !== null
+        ? `; ${money(score.stakePerHit.observed)} per Súper Balota hit against ${money(score.stakePerHit.expected)} implied by the model.`
+        : `; no hit yet, the model implies one per ${money(score.stakePerHit.expected)}.`),
+  );
+  if (nights > 0) {
+    const { current, longest, pCurrent } = score.streak;
+    console.log(
+      current > 0
+        ? `  Drought: ${current} night(s) without a hit (longest ${longest}); a run this long or longer happens ${pct(pCurrent)} of the time under the model.`
+        : `  The latest night hit. Longest drought so far: ${longest} night(s).`,
+    );
+  }
   if (score.pending.length > 0) {
-    console.log(c.dim(`  Pending: ${score.pending.map((p) => p.targetDate).join(", ")} (draw not in the dataset yet).`));
+    console.log(c.dim(`  Pending: ${score.pending.map((p) => p.targetDate).join(", ")} (a draw it played is not in the dataset yet).`));
   }
   console.log("");
+  // What the ledger can and cannot see. Reading a streak into a sample this
+  // size is the mistake this line exists to prevent.
+  if (score.nightRate !== null && nights > 0) {
+    const p0 = score.nightRate;
+    const oneTicket = Math.min(1, p0 + 1 / SUPER_POOL);
+    const smallest = detectableDeparture(nights, p0);
+    console.log(
+      c.dim(
+        `  Sample size: with ${nights} night(s) this ledger can only detect a model that hits ${pct(p0 + smallest)} or more\n` +
+          `  instead of ${pct(p0)} (80 % power, two-sided 5 %). Telling ${pct(p0)} from ${pct(oneTicket)} — a rule worth one\n` +
+          `  more ticket of coverage — needs ${nightsToDistinguish(p0, oneTicket).toLocaleString("es-CO")} nights; ` +
+          `from ${pct(p0 + 0.0225)}, ${nightsToDistinguish(p0, Math.min(1, p0 + 0.0225)).toLocaleString("es-CO")} nights.`,
+      ),
+    );
+  }
   console.log(
     c.dim(
       "  A p-value near 1 is the model doing exactly what it promised; a small one in either\n" +

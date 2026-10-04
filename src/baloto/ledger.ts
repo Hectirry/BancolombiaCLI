@@ -13,7 +13,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { datasetPath, type Draw, type Game } from "./dataset.ts";
-import { PRIZE_TIERS, SUPER_POOL, classify } from "./rules.ts";
+import { ECONOMICS, PRIZE_TIERS, SUPER_POOL, classify } from "./rules.ts";
 import { poissonBinomialPmf } from "./numeric.ts";
 
 export interface LedgerTicket {
@@ -31,6 +31,36 @@ export interface LedgerEntry {
   /** Which model produced them, e.g. "super/posterior". */
   model: string;
   note?: string;
+  /**
+   * True when the same tickets also play the night's other draw (Revancha
+   * for a Baloto ticket). The night is then scored against both draws and
+   * its exact expectation doubles up: 1 − (1 − k/16)².
+   */
+  revancha?: boolean;
+  /**
+   * What the tickets cost, in COP, at the prices in force when they were
+   * recorded. Stored rather than recomputed because prices change and a
+   * stake is a fact about the night it was placed.
+   */
+  cost?: number;
+}
+
+/** The other draw of the same night. */
+export function companionGame(game: Game): Game {
+  return game === "baloto" ? "revancha" : "baloto";
+}
+
+/** What an entry cost: the recorded figure, or today's prices when it has none. */
+export function entryCost(entry: LedgerEntry): number {
+  if (typeof entry.cost === "number" && Number.isFinite(entry.cost)) return entry.cost;
+  const perTicket = ECONOMICS.ticketPrice + (entry.revancha ? ECONOMICS.revanchaPrice : 0);
+  return entry.tickets.length * perTicket;
+}
+
+/** Exact P(some ticket hits the Súper Balota in at least one of the night's draws). */
+export function entryExpectation(entry: LedgerEntry): number {
+  const perDraw = distinctSupers(entry) / SUPER_POOL;
+  return 1 - (1 - perDraw) ** (entry.revancha ? 2 : 1);
 }
 
 export interface Ledger {
@@ -82,8 +112,8 @@ export function recordRecommendation(ledger: Ledger, entry: LedgerEntry): Ledger
   return { entries };
 }
 
-export interface ScoredEntry {
-  entry: LedgerEntry;
+/** The tickets scored against one draw. */
+export interface DrawResult {
   draw: Draw;
   /** Main-number matches per ticket. */
   matches: number[];
@@ -91,15 +121,36 @@ export interface ScoredEntry {
   superHitTicket: number;
   /** Best paying tier id across the tickets, or null. */
   bestTier: string | null;
+}
+
+export interface ScoredEntry extends DrawResult {
+  entry: LedgerEntry;
+  /** The night's other draw, when the entry played Revancha. */
+  companion: DrawResult | null;
+  /** True when some ticket hit the Súper Balota in any draw it played. */
+  nightSuperHit: boolean;
+  /** Exact P(nightSuperHit) for this entry: 1 − (1 − k/16)^draws. */
+  expected: number;
+  /** True when some ticket won anything in any draw it played. */
   wonAnything: boolean;
+}
+
+/** Nights without a Súper Balota hit, read as a bettor reads a drought. */
+export interface Streak {
+  /** Consecutive scored nights without a hit, counting back from the latest. */
+  current: number;
+  /** Longest such run in the ledger. */
+  longest: number;
+  /** P(a run at least as long as `current`) under the model, exact: Π(1 − pᵢ). */
+  pCurrent: number;
 }
 
 export interface LedgerScore {
   scored: ScoredEntry[];
   pending: LedgerEntry[];
-  /** Draws where some ticket hit the Súper Balota. */
+  /** Nights where some ticket hit the Súper Balota in any draw it played. */
   superHits: number;
-  /** Σ tickets/16 over scored draws — the exact expectation. */
+  /** Σ over nights of the exact per-night hit probability. */
   superExpected: number;
   /**
    * Two-sided exact p-value of `superHits` under the fair null. Each scored
@@ -109,49 +160,164 @@ export interface LedgerScore {
    * been scored yet.
    */
   superPValue: number | null;
+  /** The shared per-night expectation behind `superPValue`, or null when nights differ. */
+  nightRate: number | null;
   wins: number;
+  /** Tickets bought over the scored nights. */
+  tickets: number;
+  /** Pesos staked over the scored nights. */
+  staked: number;
+  /** Pesos staked per Súper Balota hit: observed, and what the model implies. */
+  stakePerHit: { observed: number | null; expected: number };
+  streak: Streak;
 }
 
-/** Match recorded recommendations to the draws that followed, and score them. */
+/**
+ * Match recorded recommendations to the draws that followed, and score them.
+ *
+ * `draws` may hold both games: an entry is matched to its own game on its
+ * target date, and, when it played Revancha, to the other game that night as
+ * well. A night is pending until every draw it played is in the dataset, so a
+ * Revancha night is never half-scored.
+ */
 export function scoreLedger(ledger: Ledger, draws: Draw[]): LedgerScore {
   const byKey = new Map(draws.map((d) => [`${d.date}:${d.game}`, d]));
   const scored: ScoredEntry[] = [];
   const pending: LedgerEntry[] = [];
-  const tierRank = new Map(PRIZE_TIERS.map((t, i) => [t.id, i]));
 
   for (const entry of ledger.entries) {
     const draw = byKey.get(`${entry.targetDate}:${entry.game}`);
-    if (!draw) {
+    const other = entry.revancha ? byKey.get(`${entry.targetDate}:${companionGame(entry.game)}`) : undefined;
+    if (!draw || (entry.revancha && !other)) {
       pending.push(entry);
       continue;
     }
-    const drawn = new Set(draw.main);
-    const matches = entry.tickets.map((t) => t.main.filter((n) => drawn.has(n)).length);
-    const superHitTicket = entry.tickets.findIndex((t) => t.super === draw.super);
-    let bestTier: string | null = null;
-    for (const t of entry.tickets) {
-      const tier = classify({ main: t.main, super: t.super }, { main: draw.main, super: draw.super });
-      if (tier && (bestTier === null || tierRank.get(tier.id)! < tierRank.get(bestTier)!)) bestTier = tier.id;
-    }
-    scored.push({ entry, draw, matches, superHitTicket, bestTier, wonAnything: bestTier !== null });
+    const own = scoreAgainst(entry.tickets, draw);
+    const companion = other ? scoreAgainst(entry.tickets, other) : null;
+    scored.push({
+      entry,
+      ...own,
+      companion,
+      nightSuperHit: own.superHitTicket >= 0 || (companion !== null && companion.superHitTicket >= 0),
+      expected: entryExpectation(entry),
+      wonAnything: own.bestTier !== null || (companion !== null && companion.bestTier !== null),
+    });
   }
 
-  const superHits = scored.filter((s) => s.superHitTicket >= 0).length;
-  const probabilities = scored.map((s) => distinctSupers(s.entry) / SUPER_POOL);
+  const superHits = scored.filter((s) => s.nightSuperHit).length;
+  const probabilities = scored.map((s) => s.expected);
   const superExpected = probabilities.reduce((acc, p) => acc + p, 0);
+  // Each night is a Bernoulli with its own exact probability (distinct balls,
+  // one or two draws), so the hit count is Poisson-binomial; equal nights
+  // reduce to the plain binomial.
   const superPValue = scored.length > 0 ? poissonBinomialTwoSided(superHits, probabilities) : null;
+  const rates = new Set(probabilities);
+  const nightRate = scored.length > 0 && rates.size === 1 ? [...rates][0]! : null;
+  const staked = scored.reduce((acc, s) => acc + entryCost(s.entry), 0);
   return {
     scored,
     pending,
     superHits,
     superExpected,
     superPValue,
+    nightRate,
     wins: scored.filter((s) => s.wonAnything).length,
+    tickets: scored.reduce((acc, s) => acc + s.entry.tickets.length, 0),
+    staked,
+    stakePerHit: {
+      observed: superHits > 0 ? staked / superHits : null,
+      expected: superExpected > 0 ? staked / superExpected : 0,
+    },
+    streak: droughts(scored),
   };
+}
+
+function scoreAgainst(tickets: LedgerTicket[], draw: Draw): DrawResult {
+  const tierRank = new Map(PRIZE_TIERS.map((t, i) => [t.id, i]));
+  const drawn = new Set(draw.main);
+  const matches = tickets.map((t) => t.main.filter((n) => drawn.has(n)).length);
+  const superHitTicket = tickets.findIndex((t) => t.super === draw.super);
+  let bestTier: string | null = null;
+  for (const t of tickets) {
+    const tier = classify({ main: t.main, super: t.super }, { main: draw.main, super: draw.super });
+    if (tier && (bestTier === null || tierRank.get(tier.id)! < tierRank.get(bestTier)!)) bestTier = tier.id;
+  }
+  return { draw, matches, superHitTicket, bestTier };
+}
+
+/**
+ * Runs of nights without a Súper Balota hit. The probability attached to the
+ * current run is exact under the model — the product of each night's miss
+ * probability — so that a drought is read against what the model itself
+ * predicts rather than against a feeling: with three tickets, five straight
+ * misses happen 35 % of the time, and ten straight 12.5 %.
+ */
+function droughts(scored: ScoredEntry[]): Streak {
+  let longest = 0;
+  let run = 0;
+  for (const s of scored) {
+    run = s.nightSuperHit ? 0 : run + 1;
+    if (run > longest) longest = run;
+  }
+  const current = run;
+  let pCurrent = 1;
+  for (const s of scored.slice(scored.length - current)) pCurrent *= 1 - s.expected;
+  return { current, longest, pCurrent };
 }
 
 function distinctSupers(entry: LedgerEntry): number {
   return Math.min(SUPER_POOL, new Set(entry.tickets.map((t) => t.super)).size);
+}
+
+/**
+ * Nights needed to tell a hit rate `p0` from `p1` with a two-sided test at
+ * `alpha` and the given power (normal approximation to the binomial). This is
+ * the question a ledger has to answer before anyone reads a streak into it:
+ * 18.75 % against 25 % — a rule worth one more ticket of coverage — needs
+ * 327 nights (two years at 156 draws a year); against 21 %, 2 425 nights.
+ */
+export function nightsToDistinguish(p0: number, p1: number, alpha = 0.05, power = 0.8): number {
+  if (p1 === p0) return Infinity;
+  const za = normalQuantile(1 - alpha / 2);
+  const zb = normalQuantile(power);
+  const n = ((za * Math.sqrt(p0 * (1 - p0)) + zb * Math.sqrt(p1 * (1 - p1))) / Math.abs(p1 - p0)) ** 2;
+  return Math.ceil(n);
+}
+
+/**
+ * The smallest departure from `p0` that `nights` scored nights could detect
+ * at the given power — the honest size of what the ledger can see so far.
+ */
+export function detectableDeparture(nights: number, p0: number, alpha = 0.05, power = 0.8): number {
+  if (nights <= 0) return 1;
+  // nightsToDistinguish is decreasing in |p1 − p0| above p0; bisect on it.
+  let lo = 0;
+  let hi = 1 - p0;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (nightsToDistinguish(p0, p0 + mid, alpha, power) > nights) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
+function normalQuantile(p: number): number {
+  // Newton on Phi(z) = p, starting from a crude guess.
+  let z = p > 0.5 ? 1 : -1;
+  for (let i = 0; i < 60; i++) {
+    const pdf = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+    z += (p - normalCdf(z)) / pdf;
+  }
+  return z;
+}
+
+function normalCdf(z: number): number {
+  // Abramowitz & Stegun 26.2.17, good to 7.5e-8.
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const poly =
+    t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const tail = (Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI)) * poly;
+  return z >= 0 ? 1 - tail : tail;
 }
 
 /**

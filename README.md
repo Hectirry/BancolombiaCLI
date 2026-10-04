@@ -223,18 +223,24 @@ bancolombia baloto pick -n 5                # combinations the crowd avoids
 bancolombia baloto super -n 3 --typical     # maximise P(hit the Súper Balota), and nothing else
 bancolombia baloto algorithms               # Markov, affinity, k-NN, delta, logistic, periodogram — walk-forward
 bancolombia baloto regime                   # hidden-Markov regimes vs i.i.d. by BIC; Baloto × Revancha independence
+bancolombia baloto super -n 2 --revancha    # the same tickets in both of the night's draws: 1 − (1 − N/16)²
 bancolombia baloto super -n 3 --record      # …and write the tickets to the ledger before the draw
 bancolombia baloto score                    # every recorded recommendation vs the draw that followed
 ```
 
 ### The ledger: the model's word, on the record, before the draw
 
-`baloto super --record` stores the tickets against the next draw date;
-`baloto score` matches each entry to the draw that followed and reports Súper
-Balota hits against the exact expectation (tickets/16 per draw) with a
-two-sided exact binomial p-value. It exists so that scoring is never done from
-memory or in hindsight — and it never refits anything; only the walk-forward
-tournament can change a recommendation.
+`baloto super --record` stores the tickets against the next draw date, with
+what they cost and whether they also play Revancha; `baloto score` matches
+each entry to every draw it played and reports Súper Balota hits against the
+exact expectation (N/16 a night, or 1 − (1 − N/16)² with Revancha) with a
+two-sided exact binomial p-value, the pesos staked per hit against what the
+model implies, the current drought and how often the model itself produces
+one that long, and the sample size the ledger would need before a streak
+could mean anything (18.75 % vs 25 % takes 327 nights; vs 21 %, 2 425). It
+exists so that scoring is never done from memory or in hindsight — and it
+never refits anything; only the walk-forward tournament can change a
+recommendation.
 
 ### Regimes and the second machine
 
@@ -302,6 +308,21 @@ Nothing predicts the ball. What *is* exact is the coverage arithmetic: N
 probability N/16 — 6.25 %, 12.50 %, 18.75 % — with no assumption about the
 machine at all. That is the whole lever, and it is a real tripling at three
 tickets.
+
+The same lever has a second handle. Revancha is a complete second draw the
+same night (5 of 43 + 1 of 16, its own machines, independent of the first:
+`regime` p = 0.25) in which the ticket's numbers play again, for $3.000 on
+top of $6.000. A ticket with Revancha therefore gets two tries at its Súper
+Balota, and N tickets with distinct balls hit at least once with probability
+1 − (1 − N/16)²: 12.11 %, 23.44 %, 33.98 % for one, two, three
+(`nightCoverage`, verified by Monte Carlo against the real prize tiers). Per
+peso that beats extra tickets: $18.000 as three plain tickets hits 18.75 %
+(20.58 % win anything), as two tickets with Revancha 23.44 % (25.72 %). The
+advantage is exactly n(8 − n)/256 for n Revancha tickets against 1.5n plain
+ones, so it holds up to seven tickets, ties at eight (75 % either way) and
+reverses beyond, where sixteen distinct balls are a certainty and a second
+draw never is. `baloto super` prints both routes side by side; `--revancha`
+plans and records the night that way.
 
 Since the objective cannot separate the sixteen, the order among them is a
 tiebreak. The default is the Bayes action for the stated objective — highest

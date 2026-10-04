@@ -259,6 +259,7 @@ baloto
   .option("--coverage <fraction>", "How strictly 'typical' is read: 0.5 = the interquartile range of real draws, 0.8 = looser", "0.8")
   .option("--seed <number>", "Seed, for reproducible tickets")
   .option("--record", "Write these tickets to the ledger against the next draw, to be scored later")
+  .option("--revancha", "Play the same tickets in the night's Revancha draw too: 1 − (1 − N/16)² instead of N/16")
   .action(async (opts: Record<string, string>) => {
     const { superCommand } = await import("./commands/baloto.ts");
     await superCommand(opts as never);

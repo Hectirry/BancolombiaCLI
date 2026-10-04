@@ -51,11 +51,25 @@ Rules that follow from that objective, all of them measured:
    20.49 % at overlap 2 and 19.36 % for three copies —
    `winAnythingProbability`). That is a hit criterion, not a payout one. The
    report says the main numbers are free.
+6. **Revancha is coverage, the same kind as rule 2.** It is a complete second
+   draw the same night (5 of 43 + 1 of 16, independent: `regime` p = 0.25) in
+   which the ticket's numbers play again for $3.000 on top of $6.000. N
+   tickets with distinct balls and Revancha hit the Súper Balota at least
+   once with probability exactly 1 − (1 − N/16)² (`nightCoverage`, Monte
+   Carlo-verified): 23.44 % for two tickets with Revancha against 18.75 % for
+   three without, the same $18.000; "win anything" 25.72 % against 20.58 %.
+   The per-peso edge is n(8 − n)/256, so Revancha buys more hit than extra
+   tickets up to seven, ties at eight and loses beyond. This is a hit
+   criterion with no assumption about either machine; the report shows both
+   routes side by side and never mentions what a Revancha hit pays
+   (`docs/ESTRATEGIA.md` rule 2 is the payout view, and stays separate).
 
 When asked for "combinaciones para hoy", run
 `bun src/index.ts baloto super -n 3 --typical --seed <n> --record` and report
 the coverage probability (N/16), P(win anything) from the budget curve, the
-balls, and the honest caveat in rule 4.
+balls, and the honest caveat in rule 4. If the owner is spending a fixed
+budget, say what the same pesos buy with Revancha (rule 6) and add
+`--revancha` so the ledger scores both draws.
 Do not present RTP, breakeven jackpot or co-winner figures alongside it
 unless asked; the owner has said that reads as optimising payout again.
 
@@ -143,6 +157,7 @@ That is a watch item, not a lever: over-uniformity cannot be bet on.
 | Mutual exclusivity / disjoint tickets | the best P(win anything) for N tickets | TESTED and ADOPTED (rule 5): 20.58 % with 3 disjoint tickets, exact optimum |
 | Covering designs / "lottery wheels" C(v,k,t) | a *guaranteed* t-match | N/A at any sane budget: the Schönheim bound for C(43,5,3) is ⌈43/5·⌈42/4·⌈41/3⌉⌉⌉ = **1 265 tickets** to guarantee one 3-match (the La Jolla repository stops at v ≤ 32). A 2-if-5 guarantee needs ≥95 tickets and 2 matches pay nothing without the Súper Balota. Wheels redistribute wins across tickets; they do not change expected matches. |
 | Group testing / orthogonal arrays | structured coverage of the 16 Súper Balotas | N/A: with 16 outcomes and one ball per ticket the optimal design is trivial — distinct balls, N/16 |
+| Revancha as a second independent draw | more draws per ticket instead of more tickets per draw | TESTED and ADOPTED (rule 6) 2026-10-04: 1 − (1 − N/16)² exact, Monte Carlo agrees within 1.7σ; two Revancha tickets 23.44 % vs three plain 18.75 % at $18.000; edge n(8 − n)/256, crossover at eight tickets |
 
 ### Physics & dynamics
 | Area | What it would catch | Status |
@@ -177,9 +192,13 @@ cuando el examen sale limpio." Never refit on a single draw.
 
 The live half of that discipline is the **ledger** (`src/baloto/ledger.ts`,
 `~/.bancolombia/baloto-ledger.json`): `baloto super --record` writes the
-tickets against the next draw date *before* the draw; `baloto score` matches
-every entry to the draw that followed and reports Súper Balota hits against
-the exact expectation (Σ tickets/16) with a two-sided exact binomial p-value.
-Record every recommendation handed to the owner. Never score from memory, and
-never backfill an entry that was not stated before its draw. The ledger never
-changes a model; the tournament does.
+tickets against the next draw date *before* the draw, with their cost and
+whether they play Revancha; `baloto score` matches every entry to every draw
+it played and reports Súper Balota hits against the exact expectation
+(Σ over nights of N/16, or 1 − (1 − N/16)² with Revancha) with a two-sided
+exact binomial p-value, pesos staked per hit against the model's own figure,
+the current drought with its probability under the model, and the sample size
+a verdict would need (`nightsToDistinguish`: 18.75 % vs 25 % takes 327
+nights). Record every recommendation handed to the owner. Never score from
+memory, and never backfill an entry that was not stated before its draw. The
+ledger never changes a model; the tournament does.
