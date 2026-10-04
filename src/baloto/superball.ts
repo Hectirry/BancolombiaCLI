@@ -229,7 +229,7 @@ export function atLeastThreeMain(): number {
   return ways / total;
 }
 
-/** Largest number of tickets whose main numbers can all be pairwise disjoint: ⌊43/5⌋ = 8. */
+/** How many tickets can still share no main number: ⌊43/5⌋ = 8. */
 export const MAX_DISJOINT_TICKETS = Math.floor(MAIN_POOL / MAIN_PICK);
 
 /**
@@ -441,6 +441,16 @@ export function nightCoverageForBudget(budget: number): { without: NightCoverage
   const plain = Math.floor(budget / ECONOMICS.ticketPrice);
   const doubled = Math.floor(budget / (ECONOMICS.ticketPrice + ECONOMICS.revanchaPrice));
   return { without: nightCoverage(plain, false), withRevancha: nightCoverage(doubled, true) };
+}
+
+/**
+ * The budget curve with its honesty attached: exact for ≤ 8 tickets, an upper
+ * bound beyond — except at 16 or more tickets, where distinct Súper Balotas
+ * alone make the probability exactly one whatever the main numbers do.
+ */
+export function winAnythingBudget(tickets: number): { probability: number; exact: boolean } {
+  const probability = winAnythingProbability(tickets);
+  return { probability, exact: tickets <= MAX_DISJOINT_TICKETS || tickets >= SUPER_POOL };
 }
 
 /** One candidate way of choosing which Súper Balotas to cover. */

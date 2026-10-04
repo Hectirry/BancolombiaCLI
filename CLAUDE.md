@@ -32,10 +32,13 @@ Rules that follow from that objective, all of them measured:
    tried highest posterior, lowest posterior, hot-last-100, most overdue,
    Markov successors, avoid the recent, repeat the recent, fixed 1-2-3,
    least-played, a logistic regression on lag features and a periodogram
-   projection: every one lands inside the noise band around N/16 (best
-   z = +1.56 with eleven comparisons).
+   projection, plus a two-state hidden-Markov predictive and the "persist"
+   streak rule: every one lands inside the noise band around N/16 (574 draws,
+   thirteen rules; best "cold" z = +1.54, worst "fixed 1-2-3" z = −1.67).
    No ball is distinguishable from 1/16 once all sixteen intervals are read
-   simultaneously (`SIMULTANEOUS_Z`). Any new rule must be entered in that
+   simultaneously (Bonferroni over 16: Φ⁻¹(1 − 0.025/16) = 2.9552, computed by
+   `bonferroniZ`; an earlier hard-coded 2.8945 was a 6 % family level and was
+   caught in audit — exact Beta quantiles are used now, `numeric.ts`). Any new rule must be entered in that
    tournament and clear its Bonferroni threshold before it changes a
    recommendation.
 4. **The order among equally likely balls is the objective's own tiebreak:
@@ -81,8 +84,11 @@ neighbours, the delta system, a per-ball logistic regression on lag features,
 a periodogram projection and their ensemble — walk-forward through
 `backtest()` against 5·5/43 = 0.581 matches per ticket, plus Fisher's g-test
 for periodicity on every ball with a Bonferroni threshold. On 973 real draws
-every algorithm sits inside ±1.7 z, the logistic coefficients are all within
-±0.01 of zero, and no ball has a significant cycle. A new predictor goes in
+every algorithm sits inside ±1.7 z, every logistic coefficient (true MLE by
+IRLS, with standard errors) is within one standard error of zero, and no ball
+has a significant cycle (sharpest ball 33, Fisher p = 0.027 vs 0.0012). An
+earlier claim of "coefficients within ±0.01" described an under-converged
+optimiser with an over-strong ridge, not the data; the conclusion is the same. A new predictor goes in
 `algorithmStrategies()` and is judged there before anything is said about it.
 
 ## Baloto: research registry — every mathematical area considered, and its verdict
@@ -137,7 +143,7 @@ That is a watch item, not a lever: over-uniformity cannot be bet on.
 ### Time series & signal processing
 | Area | What it would catch | Status |
 | --- | --- | --- |
-| Periodogram + Fisher's g | a ball on a cycle | TESTED `algorithms`: no significant cycle at the Bonferroni threshold (sharpest ball 33, p=0.011 vs 0.0012) |
+| Periodogram + Fisher's g | a ball on a cycle | TESTED `algorithms`: no significant cycle at the Bonferroni threshold (sharpest ball 33, exact Fisher p=0.027 vs 0.0012) |
 | Wavelets / time-localised spectra | a cycle that exists only for a while | OPEN: low prior; the windowed scan in `physical` already localises in time, and found nothing |
 | ARIMA / state-space on counts | autocorrelated frequencies | N/A for i.i.d. categorical draws: autocorrelation of the indicator series is what `stats` and the entropy test measure, and it is nil |
 | Recurrence plots / permutation entropy | deterministic structure in an apparently random series | OPEN: cheap to add beside the gzip test; expected null |
@@ -145,7 +151,7 @@ That is a watch item, not a lever: over-uniformity cannot be bet on.
 ### Machine learning
 | Area | What it would catch | Status |
 | --- | --- | --- |
-| Logistic regression on lag features | any linear-in-features memory | TESTED `algorithms`: coefficients all within ±0.01 of zero; z=−1.00 |
+| Logistic regression on lag features | any linear-in-features memory | TESTED `algorithms`: IRLS MLE, every coefficient within one standard error of zero (gap 0.09±0.16, f200 −0.03±0.09, last 0.05±0.05); main z=−1.00, Súper z=−1.35 |
 | k-NN, Markov transitions, pairwise affinity, delta system, ensemble | pattern recall | TESTED `algorithms`: all inside ±1.7 z over 673 draws |
 | Gradient boosting / random forests / LSTM | non-linear memory | OPEN, low prior: the linear model found zero signal and the published comparisons of LSTMs against random picks show no difference (hit rate 0.7359 vs 0.7352 in one widely cited test). Enter via `algorithmStrategies()` if tried; expect noise. |
 | Conformal prediction | honest uncertainty sets around any predictor | N/A as a *predictor*; useful only as a wrapper, and the exact sets here are already known (N/16, 7 221/962 598) |
@@ -155,6 +161,7 @@ That is a watch item, not a lever: over-uniformity cannot be bet on.
 | --- | --- | --- |
 | Exact hypergeometric enumeration | the true odds of every event | TESTED `rules`: 15 401 568 tickets, 1-in-14 overall, 7 221/962 598 for ≥3 matches |
 | Mutual exclusivity / disjoint tickets | the best P(win anything) for N tickets | TESTED and ADOPTED (rule 5): 20.58 % with 3 disjoint tickets, exact optimum |
+| Minimal-overlap (linear) designs for N > 8 tickets | the best P(≥3 main) once disjoint tickets are impossible (5N > 43) | TESTED 2026-10-04 `coverage.ts`: exact enumeration of the 962 598 draws (`winAnythingExact`, `countWinningDraws`); two tickets sharing one number lose 36 draws, sharing two lose 351, so the best designs share ≤ 1 and \|∪Tᵢ\| = 7 221·N − 36·Σₓ C(dₓ,2) with balanced degrees (`linearBoundDraws`). Proven optimal for N ≤ 9 (N=9: 64 917/962 598); for 10 ≤ N ≤ 20 `optimiseCoverage` reaches that bound every time and 20 000-move exhaustive searches never beat it — "linear-optimal", global optimum conjectured. P(SB) = 1 from N = 16 with balanced distinct balls, so P(win anything) = 1 whatever the main numbers. |
 | Covering designs / "lottery wheels" C(v,k,t) | a *guaranteed* t-match | N/A at any sane budget: the Schönheim bound for C(43,5,3) is ⌈43/5·⌈42/4·⌈41/3⌉⌉⌉ = **1 265 tickets** to guarantee one 3-match (the La Jolla repository stops at v ≤ 32). A 2-if-5 guarantee needs ≥95 tickets and 2 matches pay nothing without the Súper Balota. Wheels redistribute wins across tickets; they do not change expected matches. |
 | Group testing / orthogonal arrays | structured coverage of the 16 Súper Balotas | N/A: with 16 outcomes and one ball per ticket the optimal design is trivial — distinct balls, N/16 |
 | Revancha as a second independent draw | more draws per ticket instead of more tickets per draw | TESTED and ADOPTED (rule 6) 2026-10-04: 1 − (1 − N/16)² exact, Monte Carlo agrees within 1.7σ; two Revancha tickets 23.44 % vs three plain 18.75 % at $18.000; edge n(8 − n)/256, crossover at eight tickets |

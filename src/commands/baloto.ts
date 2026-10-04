@@ -951,6 +951,7 @@ export async function superCommand(opts: {
     scoreSuperRules,
     standardSuperRules,
     superPosterior,
+    winAnythingBudget,
     winAnythingProbability,
   } = await import("../baloto/superball.ts");
   const { model } = await loadBiasModel(game);
@@ -1072,21 +1073,27 @@ export async function superCommand(opts: {
     table(showCrowd ? ["MAIN NUMBERS", "SÚPER", "CROWD ON THAT SÚPER"] : ["MAIN NUMBERS", "SÚPER"], rows),
   );
   console.log("");
-  const shared = new Set<number>();
-  let disjoint = true;
-  for (const t of report.tickets) {
-    for (const n of t.ticket.main) {
-      if (shared.has(n)) disjoint = false;
-      shared.add(n);
-    }
-  }
+  // P(win anything) for exactly these tickets, by exact enumeration of the
+  // 962 598 main draws (coverage.ts). Disjoint tickets sit on the union bound
+  // and are the proven optimum; beyond eight tickets no arrangement can be
+  // disjoint, and the best minimal-overlap design found says how far the
+  // recommendation is from it.
+  const { optimiseCoverage, overlapProfile, winAnythingExact } = await import("../baloto/coverage.ts");
+  const handed = report.tickets.map((t, i) => ({ main: t.ticket.main, super: plan.balls[i] ?? t.ticket.super }));
+  const exactWin = winAnythingExact(handed);
+  const overlap = overlapProfile(handed.map((t) => t.main));
+  const seed = opts.seed ? Number.parseInt(opts.seed, 10) : 1;
+  const bestPlan = overlap.maxOverlap === 0 ? null : optimiseCoverage(tickets, seed);
   console.log(
     c.dim(
       "  The five main numbers are free: the objective above does not constrain them,\n" +
         "  so they are taken from the least-played combinations" +
-        (disjoint
-          ? `, sharing no number across\n  tickets — the exact optimum for winning anything with ${tickets} tickets: ${pct(winAnythingProbability(tickets))}.`
-          : ".") +
+        (overlap.maxOverlap === 0
+          ? `, sharing no number across\n  tickets — the exact optimum for winning anything with ${tickets} tickets: ${pct(exactWin)}.`
+          : `, sharing at most ${overlap.maxOverlap} number(s)\n  between any two tickets — P(win anything) for exactly these tickets: ${pct(exactWin)}` +
+            (bestPlan && bestPlan.winAnythingProbability > exactWin + 1e-12
+              ? ` (the best\n  arrangement found for ${tickets} tickets reaches ${pct(bestPlan.winAnythingProbability)}).`
+              : ".")) +
         "\n  A Súper Balota hit pays something at any number of main matches, so every hit is a winning ticket.",
     ),
   );
@@ -1096,18 +1103,22 @@ export async function superCommand(opts: {
   // probability, nothing else. Revancha is a second complete draw the same
   // night with the same numbers; independent of the first (regime: p = 0.25),
   // so it is coverage of the same kind as distinct balls: 1 − (1 − N/16)².
-  console.log(c.bold("  What each ticket buys (exact, fair machine, distinct Súper Balotas, disjoint numbers)"));
+  console.log(c.bold("  What each ticket buys (exact, fair machine, distinct Súper Balotas, minimal overlap)"));
   console.log(
     table(
       ["TICKETS", "COST", "P(SÚPER BALOTA)", "P(WIN ANYTHING)", "+REVANCHA", "P(SÚPER BALOTA)", "P(WIN ANYTHING)"],
-      [1, 2, 3, 4, 5, 6, 8].map((n) => {
+      [1, 2, 3, 4, 5, 6, 8, 10, 12, 16].map((n) => {
         const plain = nightCoverage(n, false);
         const doubled = nightCoverage(n, true);
+        // Up to eight tickets the figure is the exact optimum (disjoint numbers);
+        // beyond, it is exact for the best minimal-overlap arrangement known,
+        // strictly below the union bound (see coverage.ts for the search).
+        const note = winAnythingBudget(n).exact ? "" : " (best found)";
         return [
           String(n),
           money(plain.cost),
           pct(plain.superHit),
-          pct(plain.winAnything),
+          pct(plain.winAnything) + note,
           money(doubled.cost),
           pct(doubled.superHit),
           pct(doubled.winAnything),
@@ -1129,7 +1140,7 @@ export async function superCommand(opts: {
           money(budget),
           `${without.tickets} tickets`,
           pct(without.superHit),
-          pct(without.winAnything) + (without.tickets > 8 ? " (bound)" : ""),
+          pct(without.winAnything) + (without.tickets > 8 ? " (best found)" : ""),
           `${withRevancha.tickets} tickets`,
           better ? c.green(pct(withRevancha.superHit)) : pct(withRevancha.superHit),
           pct(withRevancha.winAnything),
