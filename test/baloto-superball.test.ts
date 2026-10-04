@@ -1,12 +1,20 @@
 import { expect, test, describe } from "bun:test";
 import {
+  MAX_DISJOINT_TICKETS,
+  SIMULTANEOUS_Z,
+  anyAtLeastThree,
   atLeastThreeMain,
+  bonferroniZ,
   planSuperCoverage,
   scoreSuperRules,
+  spreadTickets,
   standardSuperRules,
   superPosterior,
+  winAnythingOf,
   winAnythingProbability,
+  winAnythingUpperBound,
 } from "../src/baloto/superball.ts";
+import { betaCdf } from "../src/baloto/numeric.ts";
 import { makeRng, randInt, sampleDistinct } from "../src/baloto/random.ts";
 import { MAIN_PICK, MAIN_POOL, SUPER_POOL } from "../src/baloto/rules.ts";
 import type { Draw } from "../src/baloto/dataset.ts";
@@ -48,6 +56,26 @@ describe("superPosterior", () => {
     const loaded = superPosterior(rigged).find((p) => p.ball === 4)!;
     expect(loaded.distinguishable).toBe(true);
     expect(loaded.low).toBeGreaterThan(1 / SUPER_POOL);
+  });
+
+  test("the simultaneous quantile is Φ⁻¹(1 − 0.025/16), computed rather than typed", () => {
+    // 2.8945, the value once hard-coded here, is the quantile of a 6.08 %
+    // family-wise level; the 5 % one is 2.9552.
+    expect(SIMULTANEOUS_Z).toBeCloseTo(2.955167, 5);
+    expect(bonferroniZ(1)).toBeCloseTo(1.959964, 5);
+    expect(bonferroniZ(16)).toBe(SIMULTANEOUS_Z);
+  });
+
+  test("the credible intervals are exact Beta quantiles at 0.025/16 per side", () => {
+    const draws = history(974, 5);
+    const total = draws.length + SUPER_POOL;
+    for (const p of superPosterior(draws)) {
+      const a = p.count + 1;
+      expect(betaCdf(p.low, a, total - a)).toBeCloseTo(0.025 / SUPER_POOL, 9);
+      expect(betaCdf(p.high, a, total - a)).toBeCloseTo(1 - 0.025 / SUPER_POOL, 9);
+      expect(p.low).toBeLessThan(p.mean);
+      expect(p.high).toBeGreaterThan(p.mean);
+    }
   });
 });
 
@@ -156,6 +184,35 @@ describe("scoreSuperRules", () => {
     expect(cheat!.rate).toBeGreaterThan(0.25);
   });
 
+  test("a rule that wastes tickets is scored against what it actually covered", () => {
+    // Three copies of one ball cover 1/16, not 3/16. Against the fixed 3/16
+    // null such a rule would read as a −6 z catastrophe; against its own
+    // coverage it is plain noise, and its expectation says why.
+    const [wasteful, short] = scoreSuperRules(
+      draws,
+      [
+        { name: "same ball thrice", choose: () => [5, 5, 5] },
+        { name: "only one ball", choose: () => [5] },
+      ],
+      3,
+      400,
+    );
+    expect(wasteful!.expected).toBeCloseTo(500 / SUPER_POOL, 9);
+    expect(short!.expected).toBeCloseTo(500 / SUPER_POOL, 9);
+    expect(wasteful!.hits).toBe(short!.hits);
+    expect(Math.abs(wasteful!.z)).toBeLessThan(3);
+    expect(wasteful!.beatsChance).toBe(false);
+    // and a rule that plays three distinct balls keeps the old null exactly
+    const [fixed] = scoreSuperRules(draws, [{ name: "fixed", choose: () => [1, 2, 3] }], 3, 400);
+    expect(fixed!.expected).toBeCloseTo((500 * 3) / SUPER_POOL, 9);
+    expect(fixed!.z).toBeCloseTo((fixed!.hits - fixed!.expected) / Math.sqrt(500 * (3 / 16) * (13 / 16)), 9);
+  });
+
+  test("a rule cannot smuggle a fourth ticket past the budget", () => {
+    const [greedy] = scoreSuperRules(draws, [{ name: "four", choose: () => [1, 2, 3, 4] }], 3, 400);
+    expect(greedy!.expected).toBeCloseTo((500 * 3) / SUPER_POOL, 9);
+  });
+
   test("the multiple-comparison threshold widens with the field", () => {
     // The same rule, entered once against entered twenty times.
     const one = { name: "fixed", choose: (_: Draw[], n: number) => [1, 2, 3].slice(0, n) };
@@ -224,4 +281,51 @@ describe("winAnythingProbability", () => {
     expect(winAnythingProbability(16)).toBe(1);
     expect(winAnythingProbability(0)).toBe(0);
   });
+
+  test("the enumeration over all 962 598 draws agrees with the closed form while tickets are disjoint", () => {
+    expect(MAX_DISJOINT_TICKETS).toBe(8);
+    expect(anyAtLeastThree([[1, 2, 3, 4, 5]]) * 962_598).toBeCloseTo(7_221, 6);
+    const eight = spreadTickets(8);
+    expect(new Set(eight.flat()).size).toBe(40);
+    expect(anyAtLeastThree(eight) * 962_598).toBeCloseTo(8 * 7_221, 6);
+    expect(winAnythingOf(spreadTickets(3), 3)).toBeCloseTo(winAnythingProbability(3), 12);
+  });
+
+  test("two tickets sharing numbers can both reach three matches: 36, 351 and 1 227 draws", () => {
+    const a = [1, 2, 3, 4, 5];
+    for (const [shared, both] of [
+      [1, 36],
+      [2, 351],
+      [3, 1_227],
+    ] as const) {
+      const b = [...a.slice(0, shared), ...[6, 7, 8, 9, 10].slice(0, 5 - shared)];
+      const union = anyAtLeastThree([a, b]) * 962_598;
+      expect(2 * 7_221 - union).toBeCloseTo(both, 6);
+    }
+  });
+
+  test("three copies of one line: 19.36 %; the documented overlap-2 arrangement: 20.49 %", () => {
+    const line = [1, 2, 3, 4, 5];
+    expect(winAnythingOf([line, line, line], 3) * 100).toBeCloseTo(19.36, 2);
+    expect(winAnythingOf([[1, 2, 3, 4, 5], [1, 2, 6, 7, 8], [1, 2, 9, 10, 11]], 3) * 100).toBeCloseTo(20.49, 2);
+  });
+
+  test("nine tickets: the construction loses exactly 2 × 36 draws against the union bound", () => {
+    const nine = spreadTickets(9);
+    expect(nine).toHaveLength(9);
+    expect(anyAtLeastThree(nine) * 962_598).toBeCloseTo(9 * 7_221 - 72, 6);
+    expect(winAnythingProbability(9)).toBeCloseTo(winAnythingOf(nine, 9), 12);
+    expect(winAnythingProbability(9)).toBeLessThan(winAnythingUpperBound(9));
+  });
+
+  test("beyond eight tickets the figure is achievable, below the union bound, and still increasing", () => {
+    for (let n = 9; n <= 16; n++) {
+      const tickets = spreadTickets(n);
+      expect(tickets).toHaveLength(n);
+      for (const t of tickets) expect(new Set(t).size).toBe(MAIN_PICK);
+      expect(winAnythingProbability(n)).toBeLessThanOrEqual(winAnythingUpperBound(n) + 1e-12);
+      expect(winAnythingProbability(n)).toBeGreaterThan(winAnythingProbability(n - 1));
+    }
+    expect(winAnythingUpperBound(8)).toBeCloseTo(winAnythingProbability(8), 12);
+  }, 20_000);
 });

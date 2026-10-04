@@ -94,6 +94,24 @@ describe("algorithmStrategies", () => {
     const described = describeLogistic(model);
     expect(described.find((c) => c.feature === "f200")!.weight).toBeGreaterThan(0);
   });
+
+  test("the logistic fit converges to the penalised maximum likelihood, with standard errors", () => {
+    const draws = fair(500, 3);
+    const model = fitLogistic(draws);
+    expect(model.iterations).toBeLessThan(10);
+    expect(model.observations).toBe(470);
+    // The intercept sits at the base rate of 5/43 and is sharply estimated;
+    // every lag coefficient on a fair machine is inside two standard errors.
+    const described = describeLogistic(model);
+    expect(described[0]!.weight).toBeCloseTo(Math.log(5 / 38), 1);
+    for (const c of described.slice(1)) {
+      expect(c.standardError).toBeGreaterThan(0);
+      expect(Math.abs(c.z)).toBeLessThan(2.5);
+    }
+    // More iterations change nothing: the optimum was reached.
+    const longer = fitLogistic(draws, MAIN_POOL, (d) => d.main, { iterations: 100 });
+    for (let i = 0; i < model.weights.length; i++) expect(longer.weights[i]).toBeCloseTo(model.weights[i]!, 8);
+  });
 });
 
 describe("periodograms", () => {
@@ -106,6 +124,54 @@ describe("periodograms", () => {
     expect(b).toBeGreaterThanOrEqual(0);
     // ~1/m is the expected share for white noise: not significant
     expect(fisherGPValue(1 / m, m)).toBeGreaterThan(0.5);
+  });
+
+  test("Fisher's g p-value is the exact 1929 series where the series is stable", () => {
+    // m = 10, g = 0.5: only j = 1 survives (1 − 2·0.5 = 0), so P = 10 · 0.5⁹ = 10/512.
+    expect(fisherGPValue(0.5, 10)).toBeCloseTo(10 / 512, 12);
+    // m = 10, g = 0.4: 10·0.6⁹ − 45·0.2⁹ = 0.1007539…
+    expect(fisherGPValue(0.4, 10)).toBeCloseTo(10 * 0.6 ** 9 - 45 * 0.2 ** 9, 12);
+    // The exponential approximation alone would have said 0.169 here.
+    expect(Math.abs(fisherGPValue(0.4, 10) - 0.1688)).toBeGreaterThan(0.05);
+    // m = 486 (a 974-draw series), g = 0.02: exact 2.7 %, approximation 2.9 %.
+    const m = 486;
+    const exact = Array.from({ length: Math.floor(1 / 0.02) }, (_, i) => i + 1).reduce((s, j) => {
+      let logC = 0;
+      for (let i = 1; i <= j; i++) logC += Math.log(m - j + i) - Math.log(i);
+      const term = Math.exp(logC + (m - 1) * Math.log(1 - j * 0.02));
+      return s + (j % 2 === 1 ? term : -term);
+    }, 0);
+    expect(fisherGPValue(0.02, m)).toBeCloseTo(exact, 10);
+    expect(fisherGPValue(0.02, m)).toBeGreaterThan(0.026);
+    expect(fisherGPValue(0.02, m)).toBeLessThan(0.028);
+    // Still a probability, still decreasing in g, and ≈ 1 at the white-noise share.
+    expect(fisherGPValue(1.2 / m, m)).toBeGreaterThan(0.999);
+    let prev = 1.0000001;
+    for (let g = 0.01; g < 0.1; g += 0.0005) {
+      const p = fisherGPValue(g, m);
+      expect(p).toBeLessThanOrEqual(prev + 1e-9);
+      prev = p;
+    }
+  });
+
+  test("the one-step projection of a planted cosine has the right sign and size", () => {
+    // Ball 1 is present exactly when cos(ωt + φ) > 0, at a Fourier frequency.
+    const n = 240;
+    const k = 30;
+    const omega = (2 * Math.PI * k) / n;
+    for (const phi of [0.3, 1.1, 2.5, -0.8]) {
+      const hist: Draw[] = Array.from({ length: n }, (_, t) => ({
+        date: "2026-01-01",
+        game: "baloto",
+        main: Math.cos(omega * t + phi) > 0 ? [1, 2, 3, 4, 5] : [6, 7, 8, 9, 10],
+        super: 1,
+      }));
+      const row = periodograms(hist, 10)[0]!;
+      expect(row.period).toBeCloseTo(n / k, 6);
+      // The fitted sinusoid at t = n is (2/n)·Σ c_t cos(ωt) — the cosine
+      // coefficient — whose sign is that of cos(φ) for a square wave of this phase.
+      expect(Math.sign(row.nextPhase)).toBe(Math.sign(Math.cos(phi)));
+    }
   });
 
   test("finds no significant cycle in a fair machine", () => {

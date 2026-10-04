@@ -14,6 +14,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { datasetPath, type Draw, type Game } from "./dataset.ts";
 import { PRIZE_TIERS, SUPER_POOL, classify } from "./rules.ts";
+import { poissonBinomialPmf } from "./numeric.ts";
 
 export interface LedgerTicket {
   main: number[];
@@ -100,7 +101,13 @@ export interface LedgerScore {
   superHits: number;
   /** Σ tickets/16 over scored draws — the exact expectation. */
   superExpected: number;
-  /** Two-sided exact binomial p-value when every entry has the same ticket count; else null. */
+  /**
+   * Two-sided exact p-value of `superHits` under the fair null. Each scored
+   * draw is a Bernoulli with probability (distinct Súper Balotas)/16, so the
+   * hit count is Poisson-binomial; when every entry carries the same number
+   * of distinct balls this is the plain binomial. Null only when nothing has
+   * been scored yet.
+   */
   superPValue: number | null;
   wins: number;
 }
@@ -130,12 +137,9 @@ export function scoreLedger(ledger: Ledger, draws: Draw[]): LedgerScore {
   }
 
   const superHits = scored.filter((s) => s.superHitTicket >= 0).length;
-  const superExpected = scored.reduce((acc, s) => acc + distinctSupers(s.entry) / SUPER_POOL, 0);
-  const counts = new Set(scored.map((s) => distinctSupers(s.entry)));
-  const superPValue =
-    scored.length > 0 && counts.size === 1
-      ? binomialTwoSided(superHits, scored.length, [...counts][0]! / SUPER_POOL)
-      : null;
+  const probabilities = scored.map((s) => distinctSupers(s.entry) / SUPER_POOL);
+  const superExpected = probabilities.reduce((acc, p) => acc + p, 0);
+  const superPValue = scored.length > 0 ? poissonBinomialTwoSided(superHits, probabilities) : null;
   return {
     scored,
     pending,
@@ -150,16 +154,34 @@ function distinctSupers(entry: LedgerEntry): number {
   return Math.min(SUPER_POOL, new Set(entry.tickets.map((t) => t.super)).size);
 }
 
-/** Exact two-sided binomial p-value (doubling the smaller tail, capped at 1). */
+/**
+ * Exact two-sided binomial p-value, by doubling the smaller tail (both tails
+ * include the observed count) and capping at 1.
+ *
+ * Doubling is one of the two standard conventions for a skewed null. The
+ * other — summing every outcome whose probability is at most that of the
+ * observed one, as R's `binom.test` does — gives smaller values (0.049
+ * against 0.098 for 3 hits in 5 draws at 3/16). Doubling is the conservative
+ * one and is what the ledger reports: it never overstates the evidence. An
+ * observation at the centre of the distribution has a smaller tail above 1/2,
+ * so the doubled value exceeds 1 and the cap returns exactly 1.
+ */
 export function binomialTwoSided(k: number, n: number, p: number): number {
-  const pmf = (i: number): number => {
-    let logC = 0;
-    for (let j = 1; j <= i; j++) logC += Math.log(n - i + j) - Math.log(j);
-    return Math.exp(logC + i * Math.log(p) + (n - i) * Math.log(1 - p));
-  };
+  return poissonBinomialTwoSided(k, new Array<number>(n).fill(p));
+}
+
+/**
+ * Exact two-sided p-value of `k` successes among independent Bernoulli trials
+ * with the given probabilities (doubling the smaller tail, capped at 1). With
+ * equal probabilities it is `binomialTwoSided`.
+ */
+export function poissonBinomialTwoSided(k: number, probabilities: number[]): number {
+  const n = probabilities.length;
+  if (n === 0) return 1;
+  const pmf = poissonBinomialPmf(probabilities.map((p) => Math.min(1, Math.max(0, p))));
   let upper = 0;
-  for (let i = k; i <= n; i++) upper += pmf(i);
+  for (let i = k; i <= n; i++) upper += pmf[i]!;
   let lower = 0;
-  for (let i = 0; i <= k; i++) lower += pmf(i);
+  for (let i = 0; i <= k; i++) lower += pmf[i]!;
   return Math.min(1, 2 * Math.min(upper, lower));
 }
