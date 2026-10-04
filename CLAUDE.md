@@ -53,8 +53,9 @@ Rules that follow from that objective, all of them measured:
    report says the main numbers are free.
 
 When asked for "combinaciones para hoy", run
-`bun src/index.ts baloto super -n 3 --typical --seed <n>` and report the
-coverage probability (N/16), the balls, and the honest caveat in rule 4.
+`bun src/index.ts baloto super -n 3 --typical --seed <n> --record` and report
+the coverage probability (N/16), P(win anything) from the budget curve, the
+balls, and the honest caveat in rule 4.
 Do not present RTP, breakeven jackpot or co-winner figures alongside it
 unless asked; the owner has said that reads as optimising payout again.
 
@@ -104,8 +105,8 @@ a tiebreak.
 | Power analysis | what size of bias the data could even see | TESTED: 80 % power only for a ball ≥2× (main) or ≥2.4× (Súper) likelier at W=200. "Clean" means "no bias ≥ +100 %", not "no bias". |
 | Change-point detection (CUSUM / max-χ² over split points) | a ball set swapped mid-history | TESTED 2026-10-04: real max χ² 124 vs fair median 134, p=0.89 — no regime change |
 | Self-exciting point process (Hawkes-like: P(ball\|seen in last w)) | the "persist" / hot-hand effect | TESTED 2026-10-04: ratio 1.12 (w=1), 1.04, 1.02, 1.01 (w=2,4,6) against 1.00; all inside the fair 95 % band (p 0.19–0.40) |
-| Hidden Markov / regime models | latent machine states | OPEN: fit a 2-state HMM on the Súper series and compare BIC against i.i.d.; enter the Viterbi-state rule in `standardSuperRules` |
-| Copulas / dependence between Baloto and Revancha | shared machine quirks the same night | TESTED partially: super∈main 103/973 vs 113 expected (z≈−1); Revancha repeat rate 5.7 % vs Baloto 9.8 % recent (opposite sign) — independence intact; full copula OPEN |
+| Hidden Markov / regime models | latent machine states | TESTED 2026-10-04 `regime`: 2-state HMM log-lik −2687.6 vs i.i.d. −2693.3, but BIC 5602 vs 5490 — i.i.d. wins by 112 nats; the HMM predictive is ENTERED in the tournament (117/574, z=+1.00) |
+| Dependence between Baloto and Revancha (same night) | shared machine quirks | TESTED 2026-10-04 `regime`: 16×16 permutation χ² = 239.6, p = 0.25; same Súper 47 vs 60.9 expected (p = 0.98) — independent |
 
 ### Information theory & algorithmic randomness
 | Area | What it would catch | Status |
@@ -173,3 +174,12 @@ Every live draw is scored against what the model said before it. Update the
 dataset first, score, then change the model **only** if a walk-forward or
 holdout improvement exists — "afinar cuando el error lo exige, y no tocar
 cuando el examen sale limpio." Never refit on a single draw.
+
+The live half of that discipline is the **ledger** (`src/baloto/ledger.ts`,
+`~/.bancolombia/baloto-ledger.json`): `baloto super --record` writes the
+tickets against the next draw date *before* the draw; `baloto score` matches
+every entry to the draw that followed and reports Súper Balota hits against
+the exact expectation (Σ tickets/16) with a two-sided exact binomial p-value.
+Record every recommendation handed to the owner. Never score from memory, and
+never backfill an entry that was not stated before its draw. The ledger never
+changes a model; the tournament does.

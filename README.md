@@ -222,7 +222,29 @@ bancolombia baloto realized                 # selection rule backtested in actua
 bancolombia baloto pick -n 5                # combinations the crowd avoids
 bancolombia baloto super -n 3 --typical     # maximise P(hit the Súper Balota), and nothing else
 bancolombia baloto algorithms               # Markov, affinity, k-NN, delta, logistic, periodogram — walk-forward
+bancolombia baloto regime                   # hidden-Markov regimes vs i.i.d. by BIC; Baloto × Revancha independence
+bancolombia baloto super -n 3 --record      # …and write the tickets to the ledger before the draw
+bancolombia baloto score                    # every recorded recommendation vs the draw that followed
 ```
+
+### The ledger: the model's word, on the record, before the draw
+
+`baloto super --record` stores the tickets against the next draw date;
+`baloto score` matches each entry to the draw that followed and reports Súper
+Balota hits against the exact expectation (tickets/16 per draw) with a
+two-sided exact binomial p-value. It exists so that scoring is never done from
+memory or in hindsight — and it never refits anything; only the walk-forward
+tournament can change a recommendation.
+
+### Regimes and the second machine
+
+Two open items from the research registry, run: a two-state hidden Markov
+model on the Súper Balota fits the data slightly better than i.i.d. (log-lik
+−2687.6 vs −2693.3) but BIC charges it 112 nats for the privilege — there are
+no regimes. And the Baloto and Revancha Súper Balotas drawn minutes apart are
+independent (16×16 permutation χ² p = 0.25; same ball 47 times against 60.9
+expected). The HMM's one-step predictive is in the tournament anyway, where
+it scores 117/574 (z = +1.00): noise, on the record.
 
 ### "Have you tried machine learning?" — walk-forward, yes
 

@@ -896,6 +896,7 @@ export async function superCommand(opts: {
   typical?: boolean;
   coverage?: string;
   seed?: string;
+  record?: boolean;
 }): Promise<void> {
   const game = parseGame(opts.game);
   const dataset = await requireDataset();
@@ -913,7 +914,8 @@ export async function superCommand(opts: {
   // 1. Does anything predict the ball at all?
   const warmup = opts.warmup ? Number.parseInt(opts.warmup, 10) : 400;
   const { algorithmSuperRules } = await import("../baloto/algorithms.ts");
-  const rules = [...standardSuperRules(priorStrength, model.super), ...algorithmSuperRules()];
+  const { hmmSuperRule } = await import("../baloto/regime.ts");
+  const rules = [...standardSuperRules(priorStrength, model.super), ...algorithmSuperRules(), hmmSuperRule()];
   const scores = scoreSuperRules(draws, rules, tickets, warmup);
   const base = tickets / SUPER_POOL;
   console.log(
@@ -1033,11 +1035,144 @@ export async function superCommand(opts: {
     ),
   );
   console.log("");
+  // The budget curve: the only lever that moves the objective is N, so show
+  // exactly what each extra ticket buys — in hit probability, nothing else.
+  console.log(c.bold("  What each ticket buys (exact, fair machine, distinct Súper Balotas, disjoint numbers)"));
+  console.log(
+    table(
+      ["TICKETS", "P(SÚPER BALOTA)", "P(WIN ANYTHING)"],
+      [1, 2, 3, 4, 5, 6, 8].map((n) => [
+        String(n),
+        pct(n / SUPER_POOL),
+        pct(winAnythingProbability(n)) + (n > 8 ? " (upper bound)" : ""),
+      ]),
+    ),
+  );
+  console.log("");
   console.log(
     c.yellow(
       `  ${pct(plan.hitProbability)} is the probability of hitting the Súper Balota, not of winning the jackpot.\n` +
         "  The jackpot still needs all five main numbers as well, at 1 in 962 598.",
     ),
+  );
+
+  if (opts.record === true) {
+    const { loadLedger, saveLedger, recordRecommendation, nextDrawDate } = await import("../baloto/ledger.ts");
+    const latest = draws[draws.length - 1]?.date;
+    if (!latest) return;
+    const target = nextDrawDate(latest);
+    const ledger = recordRecommendation(await loadLedger(), {
+      recordedAt: new Date().toISOString(),
+      targetDate: target,
+      game,
+      model: `super/${plan.rule}`,
+      tickets: report.tickets.map((t, i) => ({ main: t.ticket.main, super: plan.balls[i] ?? t.ticket.super })),
+      note: `seed ${opts.seed ?? "none"}, typical ${opts.typical === true}`,
+    });
+    await saveLedger(ledger);
+    console.log("");
+    console.log(c.green(`  Recorded for the ${target} draw. Score it afterwards with: bancolombia baloto score`));
+  }
+}
+
+/**
+ * `baloto score` — the live half of the scoring discipline: every recorded
+ * recommendation against the draw that followed, hit rate against its exact
+ * expectation, and a p-value so that luck in either direction is named.
+ */
+export async function scoreCommand(opts: { game?: string }): Promise<void> {
+  const game = parseGame(opts.game);
+  const dataset = await requireDataset();
+  const draws = drawsFor(dataset, game);
+  const { loadLedger, scoreLedger } = await import("../baloto/ledger.ts");
+  const ledger = await loadLedger();
+  const score = scoreLedger({ entries: ledger.entries.filter((e) => e.game === game) }, draws);
+
+  console.log(c.bold(`Recommendation ledger — ${game}`));
+  if (score.scored.length === 0 && score.pending.length === 0) {
+    console.log(c.dim("  Nothing recorded yet. Run `baloto super --record` before a draw."));
+    return;
+  }
+  console.log("");
+  console.log(
+    table(
+      ["DRAW", "RESULT", "TICKETS (matches)", "SÚPER", "BEST TIER"],
+      score.scored.map((s) => [
+        s.draw.date,
+        `${s.draw.main.map((n) => String(n).padStart(2, "0")).join(" ")} + ${String(s.draw.super).padStart(2, "0")}`,
+        s.entry.tickets
+          .map((t, i) => `${t.main.map((n) => String(n).padStart(2, "0")).join(" ")}+${String(t.super).padStart(2, "0")} (${s.matches[i]})`)
+          .join("  "),
+        s.superHitTicket >= 0 ? c.green(`hit #${s.superHitTicket + 1}`) : c.dim("—"),
+        s.bestTier ?? c.dim("—"),
+      ]),
+    ),
+  );
+  console.log("");
+  console.log(
+    `  Súper Balota hits: ${score.superHits} of ${score.scored.length} draws; expected ${score.superExpected.toFixed(2)}` +
+      (score.superPValue !== null ? `; two-sided exact p = ${score.superPValue.toFixed(3)}` : ""),
+  );
+  console.log(`  Won anything: ${score.wins} of ${score.scored.length}.`);
+  if (score.pending.length > 0) {
+    console.log(c.dim(`  Pending: ${score.pending.map((p) => p.targetDate).join(", ")} (draw not in the dataset yet).`));
+  }
+  console.log("");
+  console.log(
+    c.dim(
+      "  A p-value near 1 is the model doing exactly what it promised; a small one in either\n" +
+        "  direction is luck until the tournament says otherwise — the ledger never refits anything.",
+    ),
+  );
+}
+
+/**
+ * `baloto regime` — two OPEN items from the research registry, run properly:
+ * a two-state hidden Markov model against i.i.d. by BIC, and the dependence
+ * between the Baloto and Revancha Súper Balotas drawn the same night.
+ */
+export async function regimeCommand(opts: { states?: string; sims?: string }): Promise<void> {
+  const dataset = await requireDataset();
+  const baloto = drawsFor(dataset, "baloto");
+  const revancha = drawsFor(dataset, "revancha");
+  const states = opts.states ? Number.parseInt(opts.states, 10) : 2;
+  const sims = opts.sims ? Number.parseInt(opts.sims, 10) : 2000;
+  const { regimeEvidence, crossGameDependence } = await import("../baloto/regime.ts");
+
+  console.log(c.bold(`Regimes — ${baloto.length.toLocaleString("es-CO")} Súper Balotas`));
+  const ev = regimeEvidence(baloto, states);
+  console.log(
+    table(
+      ["MODEL", "LOG-LIK", "PARAMS", "BIC"],
+      [
+        ["i.i.d. (fair-or-loaded, no memory)", ev.iid.logLikelihood.toFixed(1), String(ev.iid.parameters), ev.iid.bic.toFixed(1)],
+        [`hidden Markov, ${states} states`, ev.hmm.logLikelihood.toFixed(1), String(ev.hmm.parameters), ev.hmm.bic.toFixed(1)],
+      ],
+    ),
+  );
+  console.log("");
+  console.log(
+    ev.favoursRegimes
+      ? c.yellow(`  BIC favours regimes by ${ev.deltaBic.toFixed(1)} nats; state separation ${ev.stateSeparation.toFixed(2)}, occupancy ${ev.occupancy.map((o) => pct(o)).join(" / ")}.`)
+      : c.dim(
+          `  BIC favours i.i.d. by ${(-ev.deltaBic).toFixed(1)} nats: the extra states do not earn their parameters.\n` +
+            `  (Fitted separation ${ev.stateSeparation.toFixed(2)}, occupancy ${ev.occupancy.map((o) => pct(o)).join(" / ")} — what EM finds when there is nothing to find.)`,
+        ),
+  );
+  console.log("");
+
+  const dep = crossGameDependence(baloto, revancha, sims);
+  console.log(c.bold(`  Baloto × Revancha Súper Balota, same night (${dep.pairs.toLocaleString("es-CO")} pairs)`));
+  console.log(
+    c.dim(
+      `  16×16 χ² = ${dep.chiSquare.toFixed(1)}, permutation p = ${dep.pValue.toFixed(3)}; ` +
+        `same ball ${dep.sameSuper} times vs ${dep.sameSuperExpected.toFixed(1)} expected (p = ${dep.sameSuperPValue.toFixed(3)}).`,
+    ),
+  );
+  console.log(
+    dep.pValue < 0.01
+      ? c.yellow("  The two machines are not independent — investigate before trusting either as fair.")
+      : c.dim("  Independent, as two separate machines should be."),
   );
 }
 

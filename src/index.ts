@@ -257,9 +257,29 @@ baloto
   .option("--typical", "Only main numbers shaped like a plausible real result")
   .option("--coverage <fraction>", "How strictly 'typical' is read: 0.5 = the interquartile range of real draws, 0.8 = looser", "0.8")
   .option("--seed <number>", "Seed, for reproducible tickets")
+  .option("--record", "Write these tickets to the ledger against the next draw, to be scored later")
   .action(async (opts: Record<string, string>) => {
     const { superCommand } = await import("./commands/baloto.ts");
     await superCommand(opts as never);
+  });
+
+baloto
+  .command("score")
+  .description("Score every recorded recommendation against the draw that followed")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .action(async (opts: Record<string, string>) => {
+    const { scoreCommand } = await import("./commands/baloto.ts");
+    await scoreCommand(opts as never);
+  });
+
+baloto
+  .command("regime")
+  .description("Hidden-Markov regimes vs i.i.d. by BIC, and Baloto × Revancha independence")
+  .option("--states <number>", "Hidden states to fit", "2")
+  .option("--sims <number>", "Permutations for the independence test", "2000")
+  .action(async (opts: Record<string, string>) => {
+    const { regimeCommand } = await import("./commands/baloto.ts");
+    await regimeCommand(opts as never);
   });
 
 program
