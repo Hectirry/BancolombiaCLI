@@ -70,6 +70,103 @@ every algorithm sits inside ±1.7 z, the logistic coefficients are all within
 ±0.01 of zero, and no ball has a significant cycle. A new predictor goes in
 `algorithmStrategies()` and is judged there before anything is said about it.
 
+## Baloto: research registry — every mathematical area considered, and its verdict
+
+Written 2026-10-04 after a deliberate survey of what else mathematics offers
+for predicting a 5-of-43 + 1-of-16 draw. The point of this list is that the
+next person with "but have you tried X?" finds X here with a verdict and a
+number, or finds where X must be entered to get one. Status codes:
+**TESTED** (run on the 974 real draws, result given), **ENTERED** (lives in a
+standing tournament and is re-scored every run), **N/A** (the mathematics
+itself says it cannot help, with the reason), **OPEN** (worth running, not yet
+run — enter it through the tournament, never through the recommendation).
+
+### The theorem that frames everything
+
+Under exchangeability (de Finetti), the probability that a *fixed* ticket
+matches k numbers is the same for every ticket, and no function of the past
+changes the distribution of the next draw. Every technique below is therefore
+a test of **non-exchangeability** — memory, drift, or physical asymmetry. If
+none is found, the hit probability of any selection is a combinatorial
+constant and only *coverage* (how many distinct outcomes the tickets span)
+can move it. That is why rules 2 and 5 above are exact and everything else is
+a tiebreak.
+
+### Probability & statistics
+| Area | What it would catch | Status |
+| --- | --- | --- |
+| Frequentist uniformity (χ², Monte Carlo p, without-replacement correction) | a loaded ball | TESTED `stats`: 7/7 compatible with fair; Súper χ²(15)=14.6, p=0.48 |
+| Bayesian conjugate (Dirichlet posterior, simultaneous credible intervals) | a ball whose rate excludes 1/16 | TESTED `superball`: all 16 intervals cover 1/16 after `SIMULTANEOUS_Z` |
+| Multiple-comparison control (Holm, Bonferroni) | false positives from scanning 43×19 features | TESTED `profile`: 38 comparisons, none survive |
+| Walk-forward / holdout validation | overfitting of any rule | ENTERED: the discipline every tournament uses |
+| Sequential analysis (Wald SPRT) | deciding "persist" without peeking | TESTED as a *plan*: H0 18.75 % vs H1 21 %, α=β=5 % needs ≈1 850 draws (~12 years at 156/yr) to decide. Live hypotheses will not resolve in a season; say so. |
+| Extreme-value / scan statistics | a window where one ball ran hot | TESTED `physical`: max 3.61σ over 110 596 cells vs 5.11σ critical; Súper 10/14 at p=0.078 corrected |
+| Power analysis | what size of bias the data could even see | TESTED: 80 % power only for a ball ≥2× (main) or ≥2.4× (Súper) likelier at W=200. "Clean" means "no bias ≥ +100 %", not "no bias". |
+| Change-point detection (CUSUM / max-χ² over split points) | a ball set swapped mid-history | TESTED 2026-10-04: real max χ² 124 vs fair median 134, p=0.89 — no regime change |
+| Self-exciting point process (Hawkes-like: P(ball\|seen in last w)) | the "persist" / hot-hand effect | TESTED 2026-10-04: ratio 1.12 (w=1), 1.04, 1.02, 1.01 (w=2,4,6) against 1.00; all inside the fair 95 % band (p 0.19–0.40) |
+| Hidden Markov / regime models | latent machine states | OPEN: fit a 2-state HMM on the Súper series and compare BIC against i.i.d.; enter the Viterbi-state rule in `standardSuperRules` |
+| Copulas / dependence between Baloto and Revancha | shared machine quirks the same night | TESTED partially: super∈main 103/973 vs 113 expected (z≈−1); Revancha repeat rate 5.7 % vs Baloto 9.8 % recent (opposite sign) — independence intact; full copula OPEN |
+
+### Information theory & algorithmic randomness
+| Area | What it would catch | Status |
+| --- | --- | --- |
+| Compressibility (gzip as a Kolmogorov proxy) | any regularity a universal coder can exploit | TESTED 2026-10-04: Súper 529 bytes vs fair median 530 (P=0.38); main numbers 3 386 vs 3 380 — real is *less* compressible than 98.7 % of fair histories |
+| Entropy rate / conditional entropy H(Xₜ\|Xₜ₋₁) | first-order memory | TESTED 2026-10-04: 3.806 bits vs fair median 3.809 (max 4.0), P=0.42 — no memory |
+| NIST SP 800-22 battery (runs, longest run, serial, approximate entropy) | PRNG-style defects | OPEN but low value: the draw is mechanical, not algorithmic; `stats` already covers runs and serial correlation |
+| Benford / digit laws | human-generated or tampered sequences | N/A: uniform discrete 1..43 does not follow Benford by construction; a "deviation" would be an artefact |
+
+Two independent hints point the same way — the main numbers are slightly
+*too* uniform (Pearson percentile 2.9 %, compressibility percentile 98.7 %).
+That is a watch item, not a lever: over-uniformity cannot be bet on.
+
+### Time series & signal processing
+| Area | What it would catch | Status |
+| --- | --- | --- |
+| Periodogram + Fisher's g | a ball on a cycle | TESTED `algorithms`: no significant cycle at the Bonferroni threshold (sharpest ball 33, p=0.011 vs 0.0012) |
+| Wavelets / time-localised spectra | a cycle that exists only for a while | OPEN: low prior; the windowed scan in `physical` already localises in time, and found nothing |
+| ARIMA / state-space on counts | autocorrelated frequencies | N/A for i.i.d. categorical draws: autocorrelation of the indicator series is what `stats` and the entropy test measure, and it is nil |
+| Recurrence plots / permutation entropy | deterministic structure in an apparently random series | OPEN: cheap to add beside the gzip test; expected null |
+
+### Machine learning
+| Area | What it would catch | Status |
+| --- | --- | --- |
+| Logistic regression on lag features | any linear-in-features memory | TESTED `algorithms`: coefficients all within ±0.01 of zero; z=−1.00 |
+| k-NN, Markov transitions, pairwise affinity, delta system, ensemble | pattern recall | TESTED `algorithms`: all inside ±1.7 z over 673 draws |
+| Gradient boosting / random forests / LSTM | non-linear memory | OPEN, low prior: the linear model found zero signal and the published comparisons of LSTMs against random picks show no difference (hit rate 0.7359 vs 0.7352 in one widely cited test). Enter via `algorithmStrategies()` if tried; expect noise. |
+| Conformal prediction | honest uncertainty sets around any predictor | N/A as a *predictor*; useful only as a wrapper, and the exact sets here are already known (N/16, 7 221/962 598) |
+
+### Combinatorics & design theory
+| Area | What it would catch | Status |
+| --- | --- | --- |
+| Exact hypergeometric enumeration | the true odds of every event | TESTED `rules`: 15 401 568 tickets, 1-in-14 overall, 7 221/962 598 for ≥3 matches |
+| Mutual exclusivity / disjoint tickets | the best P(win anything) for N tickets | TESTED and ADOPTED (rule 5): 20.58 % with 3 disjoint tickets, exact optimum |
+| Covering designs / "lottery wheels" C(v,k,t) | a *guaranteed* t-match | N/A at any sane budget: the Schönheim bound for C(43,5,3) is ⌈43/5·⌈42/4·⌈41/3⌉⌉⌉ = **1 265 tickets** to guarantee one 3-match (the La Jolla repository stops at v ≤ 32). A 2-if-5 guarantee needs ≥95 tickets and 2 matches pay nothing without the Súper Balota. Wheels redistribute wins across tickets; they do not change expected matches. |
+| Group testing / orthogonal arrays | structured coverage of the 16 Súper Balotas | N/A: with 16 outcomes and one ball per ticket the optimal design is trivial — distinct balls, N/16 |
+
+### Physics & dynamics
+| Area | What it would catch | Status |
+| --- | --- | --- |
+| Chaos / Lyapunov exponents | whether the chamber is predictable from initial conditions | TESTED `chaos`: λ≈54 s⁻¹, error doubles every 13 ms, prediction dead in <1.5 s even at Planck precision |
+| Ball mass / dimension asymmetry | a light or heavy ball | TESTED indirectly via `physical`. Literature note: controlled experiments find a 1–5 % *lighter* ball biases a drum while a heavier one does not — so a real defect would show as one ball *over*-drawn, which is exactly what the windowed scan looks for and has not found |
+| Weather / humidity / venue | environmental drift | OPEN and almost certainly N/A: no covariate is published per draw; a proxy (month) is already a `profile` feature and is flat |
+
+### Decision theory & game theory
+| Area | What it would catch | Status |
+| --- | --- | --- |
+| Bayes action under a pure hit loss | which ball to order first | ADOPTED (rule 4) and declared a tiebreak |
+| Minority game / crowd avoidance | sharing fewer prizes | TESTED `bias`, `pick`, `realized` (+6.9 % realised, out of sample) — a **payout** tool, excluded from `super` by the owner |
+| Kelly criterion / bankroll | how much to stake | N/A for a negative-expectation bet: Kelly fraction is ≤ 0 below the breakeven jackpot; this is budgeting, not prediction |
+| Optimal stopping | *when* to play | TESTED `ev` / `forecast` (jackpot threshold, Mondays) — payout side, see `docs/ESTRATEGIA.md` |
+
+### What this registry means operationally
+1. Prediction of *which* numbers: eleven Súper rules, fourteen main-number
+   strategies, and six information-theoretic tests say the same thing. The
+   working hypothesis is exchangeability, and the burden of proof is on any
+   new technique, in a tournament, at the Bonferroni threshold.
+2. The only exact levers are coverage (rule 2) and disjointness (rule 5).
+3. OPEN items are invitations, with the expected result stated in advance so
+   that a "finding" has to beat a prediction, not a blank page.
+
 ## Scoring discipline (all Baloto models)
 
 Every live draw is scored against what the model said before it. Update the
