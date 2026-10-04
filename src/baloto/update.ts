@@ -10,11 +10,20 @@
 
 import { FORMAT_START_DATE } from "./rules.ts";
 import type { Dataset, Draw } from "./dataset.ts";
-import { isValidDraw, loadDataset, mergeDraws, saveDataset } from "./dataset.ts";
+import type { DrawConflict } from "./dataset.ts";
 import {
+  appendConflicts,
+  isValidDraw,
+  loadDataset,
+  reconcileDraws,
+  saveDataset,
+} from "./dataset.ts";
+import {
+  OFFICIAL_SOURCE,
   PRIMARY_SOURCE,
   SECONDARY_SOURCE,
   enrichWithPrizes,
+  fetchLatestOfficial,
   fetchYear,
   verifyYear,
   type VerificationReport,
@@ -29,7 +38,28 @@ export interface UpdateOptions {
   verify?: boolean;
   /** Parallel requests for the prize pass. */
   concurrency?: number;
+  /**
+   * Read the latest draws from the operator's own pages (baloto.com) after the
+   * archives, walking forward from the last draw number stored. On by default;
+   * a failure there is reported, not fatal, because the archive passes stand
+   * on their own.
+   */
+  official?: boolean;
   onProgress?: (message: string) => void;
+}
+
+export interface OfficialPassResult {
+  /** Draws read from baloto.com in this run (both games). */
+  fetched: number;
+  /** Draw numbers read. */
+  indices: number[];
+  /** Last draw number known to exist on baloto.com after this run. */
+  lastIndex?: number;
+  /** Press-sourced rows confirmed by an official version with a prize table. */
+  confirmed: number;
+  warnings: string[];
+  /** Set when the pass could not run; the dataset was still updated from the archives. */
+  error?: string;
 }
 
 export interface UpdateResult {
@@ -41,12 +71,22 @@ export interface UpdateResult {
   /** How many draws now carry a prize breakdown. */
   withPrizes: number;
   verification: VerificationReport[];
+  /** Source disagreements noticed in this run (also persisted in the dataset). */
+  conflicts: DrawConflict[];
+  official?: OfficialPassResult;
 }
 
 const FORMAT_START_YEAR = Number(FORMAT_START_DATE.slice(0, 4));
 
 export async function updateHistory(options: UpdateOptions = {}): Promise<UpdateResult> {
-  const { full = false, skipPrizes = false, verify = false, concurrency = 6 } = options;
+  const {
+    full = false,
+    skipPrizes = false,
+    verify = false,
+    concurrency = 6,
+    official = true,
+  } = options;
+  const startedAt = new Date().toISOString();
   const log = options.onProgress ?? (() => {});
 
   const existing = await loadDataset();
@@ -76,7 +116,9 @@ export async function updateHistory(options: UpdateOptions = {}): Promise<Update
     }
   }
 
-  let merged = mergeDraws(existing?.draws ?? [], valid);
+  const reconciled = reconcileDraws(existing?.draws ?? [], valid, startedAt);
+  let merged = reconciled.draws;
+  const conflicts = [...reconciled.conflicts];
 
   if (!skipPrizes) {
     const pending = new Set(merged.filter((d) => !d.tiers).map((d) => d.date)).size;
@@ -86,11 +128,50 @@ export async function updateHistory(options: UpdateOptions = {}): Promise<Update
     });
   }
 
+  let officialIndex = existing?.officialIndex;
+  let officialPass: OfficialPassResult | undefined;
+  if (official) {
+    officialPass = { fetched: 0, indices: [], lastIndex: officialIndex, confirmed: 0, warnings: [] };
+    try {
+      log(
+        officialIndex
+          ? `Reading ${OFFICIAL_SOURCE} forward from draw ${officialIndex}…`
+          : `Reading the latest draw from ${OFFICIAL_SOURCE}…`,
+      );
+      const result = await fetchLatestOfficial(officialIndex, { onProgress: log });
+      const again = reconcileDraws(merged, result.draws, startedAt);
+      merged = again.draws;
+      conflicts.push(...again.conflicts);
+      if (result.lastIndex > 0) officialIndex = result.lastIndex;
+      officialPass = {
+        fetched: result.draws.length,
+        indices: result.indices,
+        lastIndex: officialIndex,
+        confirmed: again.confirmed,
+        warnings: result.warnings,
+      };
+    } catch (err) {
+      officialPass.error = (err as Error).message;
+      log(`  baloto.com pass skipped: ${officialPass.error}`);
+    }
+  }
+
+  // Provenance notes written by hand (e.g. a draw typed in from the press)
+  // must survive the next update; only the scrapers' own entries are managed.
+  const managed = new Set([PRIMARY_SOURCE, SECONDARY_SOURCE, OFFICIAL_SOURCE]);
+  const sources = [PRIMARY_SOURCE];
+  if (verify) sources.push(SECONDARY_SOURCE);
+  if (officialPass && !officialPass.error) sources.push(OFFICIAL_SOURCE);
+  for (const s of existing?.sources ?? []) if (!managed.has(s)) sources.push(s);
+
   const dataset: Dataset = {
     updatedAt: new Date().toISOString(),
-    sources: verify ? [PRIMARY_SOURCE, SECONDARY_SOURCE] : [PRIMARY_SOURCE],
+    sources,
     draws: merged,
   };
+  if (officialIndex !== undefined) dataset.officialIndex = officialIndex;
+  const allConflicts = appendConflicts(existing?.conflicts, conflicts);
+  if (allConflicts.length > 0) dataset.conflicts = allConflicts;
   await saveDataset(dataset);
 
   return {
@@ -99,6 +180,8 @@ export async function updateHistory(options: UpdateOptions = {}): Promise<Update
     rejected,
     withPrizes: merged.filter((d) => d.tiers && d.tiers.length > 0).length,
     verification,
+    conflicts,
+    official: officialPass,
   };
 }
 
