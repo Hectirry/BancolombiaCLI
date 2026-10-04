@@ -21,6 +21,7 @@ import type { Combination } from "./rules.ts";
 import type { Draw } from "./dataset.ts";
 import type { Strategy } from "./backtest.ts";
 import type { SuperRule } from "./superball.ts";
+import { logChoose } from "./numeric.ts";
 
 const chance = (MAIN_PICK * MAIN_PICK) / MAIN_POOL;
 
@@ -248,21 +249,44 @@ function featureRows(
 
 export interface LogisticModel {
   weights: number[];
+  /**
+   * Asymptotic standard error of each weight, from the inverse of the
+   * penalised Hessian at the optimum. Observations are the (draw, ball) pairs,
+   * treated as independent; the five-of-43 constraint makes balls within a
+   * draw slightly negatively dependent, so these are approximate — good enough
+   * to say whether a coefficient is inside its own noise.
+   */
+  standardErrors: number[];
   observations: number;
+  /** Newton iterations taken to converge. */
+  iterations: number;
 }
 
 /**
  * Ridge-regularised logistic regression, shared across balls: one weight per
- * feature, trained on every (draw, ball) pair in the history. Gradient descent
- * with a handful of passes is plenty for six parameters.
+ * feature, trained on every (draw, ball) pair in the history.
+ *
+ * Fitted by Newton's method (iteratively reweighted least squares) on the six
+ * parameters: three or four iterations reach the optimum to 1e-10, and the
+ * Hessian at the solution yields standard errors for free. An earlier version
+ * ran sixty passes of gradient descent with a ridge of 1e-2 on the *mean*
+ * loss, which on 540 000 observations is a penalty of ≈ 5 000 in log-likelihood
+ * units: coefficients came out shrunk four- to ten-fold and, for the slow
+ * directions, only a sixth of the way to even that optimum. "All within ±0.01"
+ * was a property of the optimiser, not of the data. The honest statement is
+ * the one this fit supports: every coefficient inside its own standard error.
+ *
+ * `ridge` is in log-likelihood units (added to the summed gradient as ridge·w,
+ * intercept exempt); the default of 1 is a weak proper prior that only
+ * matters when a feature is nearly constant.
  */
 export function fitLogistic(
   history: Draw[],
   pool = MAIN_POOL,
   pick: (d: Draw) => number[] = (d) => d.main,
-  options: { ridge?: number; passes?: number; learningRate?: number; minHistory?: number } = {},
+  options: { ridge?: number; iterations?: number; minHistory?: number } = {},
 ): LogisticModel {
-  const { ridge = 1e-2, passes = 60, learningRate = 0.5, minHistory = 30 } = options;
+  const { ridge = 1, iterations = 25, minHistory = 30 } = options;
   const w = new Array<number>(FEATURE_COUNT).fill(0);
   const xs = featureRows(history, minHistory, history.length, pool, pick);
   const rows = xs.map((x, k) => {
@@ -270,29 +294,73 @@ export function fitLogistic(
     for (const n of pick(history[minHistory + k]!)) y[n - 1] = 1;
     return { x, y };
   });
-  const total = rows.length * pool;
-  if (total === 0) return { weights: w, observations: 0 };
-  // Start the intercept at the base rate so the first steps are not wasted.
-  w[0] = Math.log(pick(history[0]!).length / pool / (1 - pick(history[0]!).length / pool));
-  const grad = new Array<number>(FEATURE_COUNT).fill(0);
-  for (let pass = 0; pass < passes; pass++) {
+  const empty = { weights: w, standardErrors: w.map(() => Infinity), observations: 0, iterations: 0 };
+  if (rows.length === 0) return empty;
+  // Start the intercept at the base rate so the first step is already close.
+  const base = pick(history[0]!).length / pool;
+  w[0] = Math.log(base / (1 - base));
+  const F = FEATURE_COUNT;
+  const grad = new Array<number>(F).fill(0);
+  const hess: number[][] = Array.from({ length: F }, () => new Array<number>(F).fill(0));
+  let it = 0;
+  for (it = 1; it <= iterations; it++) {
     grad.fill(0);
+    for (const row of hess) row.fill(0);
     for (const { x, y } of rows) {
       for (let n = 0; n < pool; n++) {
-        const o = n * FEATURE_COUNT;
+        const o = n * F;
         let z = 0;
-        for (let f = 0; f < FEATURE_COUNT; f++) z += w[f]! * x[o + f]!;
+        for (let f = 0; f < F; f++) z += w[f]! * x[o + f]!;
         const p = 1 / (1 + Math.exp(-z));
         const err = p - y[n]!;
-        for (let f = 0; f < FEATURE_COUNT; f++) grad[f]! += err * x[o + f]!;
+        const v = p * (1 - p);
+        for (let a = 0; a < F; a++) {
+          const xa = x[o + a]!;
+          grad[a]! += err * xa;
+          const ha = hess[a]!;
+          for (let b = a; b < F; b++) ha[b]! += v * xa * x[o + b]!;
+        }
       }
     }
-    for (let f = 0; f < FEATURE_COUNT; f++) {
-      const penalty = f === 0 ? 0 : ridge * w[f]!;
-      w[f]! -= learningRate * (grad[f]! / total + penalty);
+    for (let a = 0; a < F; a++) for (let b = 0; b < a; b++) hess[a]![b] = hess[b]![a]!;
+    for (let f = 1; f < F; f++) {
+      grad[f]! += ridge * w[f]!;
+      hess[f]![f]! += ridge;
+    }
+    const step = solveLinear(hess, grad);
+    let largest = 0;
+    for (let f = 0; f < F; f++) {
+      w[f]! -= step[f]!;
+      largest = Math.max(largest, Math.abs(step[f]!));
+    }
+    if (largest < 1e-10) break;
+  }
+  const standardErrors = Array.from({ length: F }, (_, i) => {
+    const e = new Array<number>(F).fill(0);
+    e[i] = 1;
+    return Math.sqrt(Math.max(0, solveLinear(hess, e)[i]!));
+  });
+  return { weights: w, standardErrors, observations: rows.length, iterations: Math.min(it, iterations) };
+}
+
+/** Solve H·x = g for a small symmetric positive-definite H (Gauss–Jordan with pivoting). */
+function solveLinear(H: number[][], g: number[]): number[] {
+  const n = g.length;
+  const M = H.map((row, i) => [...row, g[i]!]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r]![c]!) > Math.abs(M[p]![c]!)) p = r;
+    [M[c], M[p]] = [M[p]!, M[c]!];
+    const pivot = M[c]![c]!;
+    if (pivot === 0) continue;
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r]![c]! / pivot;
+      if (f === 0) continue;
+      for (let k = c; k <= n; k++) M[r]![k]! -= f * M[c]![k]!;
     }
   }
-  return { weights: w, observations: rows.length };
+  return M.map((row, i) => (row[i] === 0 ? 0 : row[n]! / row[i]!));
 }
 
 /** Predicted probability for every ball on the draw after `history`. */
@@ -314,9 +382,15 @@ export function logisticScores(
   return scores;
 }
 
-/** Human-readable coefficients, for the report. */
-export function describeLogistic(model: LogisticModel): { feature: string; weight: number }[] {
-  return ["intercept", ...FEATURE_NAMES].map((feature, i) => ({ feature, weight: model.weights[i]! }));
+/** Human-readable coefficients with their standard errors and z-scores, for the report. */
+export function describeLogistic(
+  model: LogisticModel,
+): { feature: string; weight: number; standardError: number; z: number }[] {
+  return ["intercept", ...FEATURE_NAMES].map((feature, i) => {
+    const weight = model.weights[i]!;
+    const standardError = model.standardErrors[i] ?? Infinity;
+    return { feature, weight, standardError, z: standardError > 0 ? weight / standardError : 0 };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -338,19 +412,44 @@ export interface Periodogram {
 }
 
 /**
- * Tail probability of the largest normalised periodogram ordinate under white
- * noise. Fisher's exact alternating series is numerically hopeless for the
- * hundreds of ordinates a 900-draw series has (binomials of 10^50 cancelling),
- * so this uses the standard large-m form: the m ordinates are approximately
- * i.i.d. exponential, and P(max/mean > x) = 1 − (1 − e^{−x})^m with x = g·m.
+ * Tail probability P(g > observed) of Fisher's g — the largest of m
+ * periodogram ordinates over their sum — under white noise.
+ *
+ * Fisher (1929): P(g > x) = Σ_{j=1}^{⌊1/x⌋} (−1)^{j−1} C(m, j) (1 − jx)^{m−1}.
+ * Near x = 1/m the series is an alternating sum of huge, nearly cancelling
+ * terms (there p ≈ 1 anyway); in the tail that matters its terms fall off
+ * factorially and the sum is exact to double precision. The series is used
+ * whenever its largest term stays below 1e4 — the rounding error is then
+ * below 1e-11 — and otherwise the standard large-m approximation takes over:
+ * the ordinates are nearly i.i.d. exponential, so with x = g·m,
+ * P(max/mean > x) ≈ 1 − (1 − e^{−x})^m. In that region p > 0.99 for m ≥ 50
+ * and the approximation only has to say "not significant".
+ *
+ * The approximation alone was 8–25 % too large at p ≈ 0.03 for m = 200–500
+ * (conservative), and useless for small m: ×3 at m = 10, p = 0.02. It is now
+ * used only where it is accurate.
  */
 export function fisherGPValue(g: number, m: number): number {
   if (m < 1 || g <= 0) return 1;
-  const x = g * m;
+  if (g >= 1) return 0;
+  let p = 0;
+  let largest = 0;
+  const terms = Math.floor(1 / g);
+  for (let j = 1; j <= terms; j++) {
+    const base = 1 - j * g;
+    if (base <= 0) break;
+    const term = Math.exp(logChoose(m, j) + (m - 1) * Math.log(base));
+    largest = Math.max(largest, term);
+    if (largest > 1e4) break;
+    p += j % 2 === 1 ? term : -term;
+    if (term < 1e-17 * Math.abs(p)) break;
+  }
+  if (largest <= 1e4) return Math.min(1, Math.max(0, p));
+  const scaled = g * m;
   // log(1 - e^{-x}) computed without cancellation, then 1 - exp(m * that).
-  const logOneMinus = x > 1e-3 ? Math.log1p(-Math.exp(-x)) : Math.log(-Math.expm1(-x));
-  const p = -Math.expm1(m * logOneMinus);
-  return Math.min(1, Math.max(0, p));
+  const logOneMinus = scaled > 1e-3 ? Math.log1p(-Math.exp(-scaled)) : Math.log(-Math.expm1(-scaled));
+  const approx = -Math.expm1(m * logOneMinus);
+  return Math.min(1, Math.max(0, approx));
 }
 
 export function periodograms(
@@ -400,10 +499,14 @@ export function periodograms(
     }
     const g = total > 0 ? best / total : 0;
     const pValue = fisherGPValue(g, m);
-    // Project the dominant sinusoid one step ahead.
+    // Project the dominant sinusoid one step ahead. The least-squares fit at a
+    // Fourier frequency is c_t ≈ a·cos(ωt) + b·sin(ωt) with a = 2·re/n and
+    // b = −2·im/n (im carries the minus sign of the forward transform), i.e.
+    // A·cos(ωt + φ) with A = (2/n)·|X| and φ = atan2(im, re). At t = n the
+    // argument ωn = 2πk is a whole turn, so the projection is simply a.
     const omega = (2 * Math.PI * bestK) / n;
     const amp = (2 / n) * Math.sqrt(bestRe * bestRe + bestIm * bestIm);
-    const phase = Math.atan2(-bestIm, bestRe);
+    const phase = Math.atan2(bestIm, bestRe);
     const next = amp * Math.cos(omega * n + phase);
     out.push({
       ball,

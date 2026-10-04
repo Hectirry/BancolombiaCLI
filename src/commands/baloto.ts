@@ -1044,7 +1044,7 @@ export async function superCommand(opts: {
       [1, 2, 3, 4, 5, 6, 8].map((n) => [
         String(n),
         pct(n / SUPER_POOL),
-        pct(winAnythingProbability(n)) + (n > 8 ? " (upper bound)" : ""),
+        pct(winAnythingProbability(n)) + (n > 8 ? " (best known arrangement)" : ""),
       ]),
     ),
   );
@@ -1229,9 +1229,9 @@ export async function algorithmsCommand(opts: {
   const model = fitLogistic(draws);
   console.log(
     c.dim(
-      "  Logistic coefficients (log-odds per unit): " +
+      "  Logistic coefficients (log-odds per unit ± standard error): " +
         describeLogistic(model)
-          .map((x) => `${x.feature} ${x.weight >= 0 ? "+" : ""}${x.weight.toFixed(3)}`)
+          .map((x) => `${x.feature} ${x.weight >= 0 ? "+" : ""}${x.weight.toFixed(3)}±${x.standardError.toFixed(3)}`)
           .join("  "),
     ),
   );

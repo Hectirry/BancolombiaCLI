@@ -347,13 +347,15 @@ export function crossGameDependence(
     if (chi(shuffled) >= observed) ge++;
     if (shuffled.filter(([a, b]) => a === b).length >= same) sameGe++;
   }
+  // Same (k+1)/(N+1) convention as `monteCarloPValue`: the observed table is
+  // one more draw from the null, so a p-value is never exactly zero.
   return {
     pairs: n,
     chiSquare: observed,
-    pValue: ge / simulations,
+    pValue: (ge + 1) / (simulations + 1),
     sameSuper: same,
     sameSuperExpected: n / SUPER_POOL,
-    sameSuperPValue: sameGe / simulations,
+    sameSuperPValue: (sameGe + 1) / (simulations + 1),
   };
 }
 

@@ -81,7 +81,10 @@ export interface EvReport {
  */
 export function expectedShare(n: number, q: number): number {
   if (q <= 0 || n <= 0) return 1;
-  return (1 - (1 - q) ** (n + 1)) / ((n + 1) * q);
+  if (q >= 1) return 1 / (n + 1);
+  // (1−q)^(n+1) through log1p/expm1: q is ~1e-7 and n ~1e6, so the plain
+  // power loses the low digits of 1−q before raising it to the million.
+  return -Math.expm1((n + 1) * Math.log1p(-q)) / ((n + 1) * q);
 }
 
 /** Probability that a random player's ticket lands in `tier` against `drawn`. */

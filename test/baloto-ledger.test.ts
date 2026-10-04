@@ -2,6 +2,7 @@ import { expect, test, describe } from "bun:test";
 import {
   binomialTwoSided,
   nextDrawDate,
+  poissonBinomialTwoSided,
   recordRecommendation,
   scoreLedger,
   type Ledger,
@@ -77,5 +78,33 @@ describe("scoreLedger", () => {
     expect(binomialTwoSided(10, 10, 0.5)).toBeCloseTo(2 / 1024, 9);
     expect(score.superPValue).not.toBeNull();
     expect(score.superPValue!).toBeGreaterThan(0.3);
+  });
+
+  test("the doubled-tail convention is the conservative one and survives the edges", () => {
+    // 3 hits in 5 at 3/16: doubling gives 2·P(X ≥ 3) = 0.0975; the
+    // minimum-likelihood convention would give 0.0488.
+    expect(binomialTwoSided(3, 5, 3 / 16)).toBeCloseTo(0.09753799, 7);
+    // Certain or impossible events: the observation is the only outcome, p = 1, never NaN.
+    expect(binomialTwoSided(3, 3, 1)).toBe(1);
+    expect(binomialTwoSided(0, 3, 0)).toBe(1);
+    expect(poissonBinomialTwoSided(0, [])).toBe(1);
+  });
+
+  test("entries with different ticket counts still get an exact (Poisson-binomial) p-value", () => {
+    const mixed: Ledger = {
+      entries: [
+        { recordedAt: "a", targetDate: "2026-10-03", game: "baloto", model: "m", tickets },
+        { recordedAt: "b", targetDate: "2026-10-05", game: "baloto", model: "m", tickets: tickets.slice(0, 2) },
+      ],
+    };
+    const s = scoreLedger(mixed, draws);
+    expect(s.superExpected).toBeCloseTo(3 / 16 + 2 / 16, 12);
+    expect(s.superHits).toBe(1);
+    // P(X ≥ 1) = 1 − (13/16)(14/16); P(X ≤ 1) = 1 − (3/16)(2/16); doubled smaller tail.
+    const upper = 1 - (13 / 16) * (14 / 16);
+    const lower = 1 - (3 / 16) * (2 / 16);
+    expect(s.superPValue).toBeCloseTo(Math.min(1, 2 * Math.min(upper, lower)), 12);
+    // equal probabilities reduce to the binomial
+    expect(poissonBinomialTwoSided(1, [3 / 16, 3 / 16, 3 / 16])).toBeCloseTo(binomialTwoSided(1, 3, 3 / 16), 12);
   });
 });

@@ -43,13 +43,22 @@
 
 import { MAIN_PICK, MAIN_POOL, SUPER_POOL } from "./rules.ts";
 import type { Draw } from "./dataset.ts";
+import { betaQuantile, normalQuantile } from "./numeric.ts";
 
 /**
- * Normal quantile for a simultaneous interval over all sixteen balls:
- * Phi^-1(1 - 0.025/16). Without it, inspecting sixteen posteriors at 95 %
- * flags roughly one ball on a machine that is perfectly fair.
+ * Normal quantile for a simultaneous two-sided 5 % look at all sixteen balls:
+ * Φ⁻¹(1 − 0.025/16) = 2.9552. Without it, inspecting sixteen posteriors at
+ * 95 % flags roughly one ball on a machine that is perfectly fair.
+ *
+ * Computed, not typed: an earlier version carried 2.8945, which is the
+ * quantile of a 6.08 % family-wise level, not 5 %. The number is kept for the
+ * report (it is the half-width of the normal approximation in standard
+ * deviations); the intervals themselves now come from the exact Beta
+ * quantiles at the same per-ball tail, 0.025/16 on each side.
  */
-const SIMULTANEOUS_Z = 2.8945;
+export const SIMULTANEOUS_Z = bonferroniZ(SUPER_POOL);
+/** Per-side tail for each ball's credible interval: 0.025/16. */
+const SIMULTANEOUS_TAIL = 0.025 / SUPER_POOL;
 
 export interface SuperPosterior {
   ball: number;
@@ -80,16 +89,15 @@ export function superPosterior(draws: Draw[], priorStrength = 1): SuperPosterior
   return counts.map((count, i) => {
     const alpha = count + priorStrength;
     const mean = alpha / total;
-    // Normal approximation to the Beta(alpha, total-alpha) posterior; the
-    // counts here are large enough for it, and it keeps the report readable.
-    const sd = Math.sqrt((mean * (1 - mean)) / (total + 1));
-    // Sixteen balls are inspected at once, so a plain 95 % interval flags about
-    // one of them on a perfectly fair machine. The width is corrected for the
-    // simultaneous look (1 - 0.05/16), which is what makes an empty
-    // `distinguishable` list mean something.
-    const z = SIMULTANEOUS_Z;
-    const low = Math.max(0, mean - z * sd);
-    const high = mean + z * sd;
+    // The marginal posterior of one ball's probability is Beta(alpha, total −
+    // alpha). Its quantiles are exact and cheap, so they are used directly: at
+    // ~60 of 974 the posterior is visibly right-skewed (skewness ≈ 0.23) and a
+    // normal interval sits about 0.35 sd too low on both ends, holding 99.62 %
+    // of the mass instead of the 99.69 % it claims. Sixteen balls are inspected
+    // at once, so each side gets 0.025/16 rather than 0.025; that is what makes
+    // an empty `distinguishable` list mean something.
+    const low = betaQuantile(SIMULTANEOUS_TAIL, alpha, total - alpha);
+    const high = betaQuantile(1 - SIMULTANEOUS_TAIL, alpha, total - alpha);
     return {
       ball: i + 1,
       count,
@@ -221,19 +229,155 @@ export function atLeastThreeMain(): number {
   return ways / total;
 }
 
+/** Largest number of tickets whose main numbers can all be pairwise disjoint: ⌊43/5⌋ = 8. */
+export const MAX_DISJOINT_TICKETS = Math.floor(MAIN_POOL / MAIN_PICK);
+
 /**
- * Exact probability that at least one of `tickets` wins *anything*, when they
- * carry distinct Súper Balotas and share no main number. A prize needs either
- * the Súper Balota or three main matches; with disjoint tickets the "three
- * matches" events are mutually exclusive (two would need six drawn balls), so
- * their probabilities add, and that is the most any arrangement can reach.
+ * Probability that at least one of `tickets` wins *anything*, when they carry
+ * distinct Súper Balotas and the main numbers are arranged as well as this
+ * module knows how. A prize needs either the Súper Balota or three main
+ * matches, and the two machines are independent, so
+ *
+ *   P(win anything) = 1 − (1 − n/16) · (1 − P(some ticket matches ≥ 3)).
+ *
+ * Up to eight tickets the main numbers can be pairwise disjoint; two disjoint
+ * tickets cannot both reach three matches (that would need six drawn balls),
+ * so the events are mutually exclusive, their probabilities add to
+ * n · 7 221/962 598, and no arrangement can do better (the union bound is
+ * attained). That part is exact and is the optimum.
+ *
+ * From nine tickets on, 5n > 43 and some number must be shared. Two tickets
+ * that share s numbers can both reach three matches in 36 (s = 1), 351
+ * (s = 2) or 1 227 (s = 3) of the 962 598 draws — counted by enumeration — so
+ * the union bound n · 7 221 is no longer attainable. What is returned here is
+ * the exact probability, by enumerating all C(43, 5) draws, of the best
+ * arrangement this module constructs (`spreadTickets`): eight disjoint blocks,
+ * then each extra ticket on the least-used numbers, never two from the same
+ * earlier ticket. For n = 9 that arrangement loses exactly 2 × 36 draws
+ * against the union bound, which is the least any arrangement with the
+ * minimum of two repeated slots can lose (nine tickets occupy 45 slots over 43
+ * numbers; a repeated number costs at least one pair's 36 draws, and with two
+ * repeats no three tickets can all reach three matches). A proof that more
+ * sharing never helps is not attempted, so from n = 9 on the value is a proven
+ * *achievable* figure, not a proven optimum; `winAnythingUpperBound` gives the
+ * ceiling nothing can exceed, and the two differ by at most 0.016 points.
+ *
  * This is a hit criterion, not a payout one: it says nothing about prize size.
  */
 export function winAnythingProbability(tickets: number): number {
-  const n = Math.max(0, Math.min(tickets, SUPER_POOL));
-  const superHit = n / SUPER_POOL;
-  const mainHit = Math.min(1, n * atLeastThreeMain());
-  return 1 - (1 - superHit) * (1 - mainHit);
+  const n = Math.max(0, Math.min(Math.floor(tickets), SUPER_POOL));
+  if (n <= MAX_DISJOINT_TICKETS) return combineWinAnything(n, n * atLeastThreeMain());
+  return winAnythingOf(spreadTickets(n), n);
+}
+
+/** The union (Bonferroni) bound: 1 − (1 − n/16)(1 − n · 7 221/962 598), capped at certainty. */
+export function winAnythingUpperBound(tickets: number): number {
+  const n = Math.max(0, Math.min(Math.floor(tickets), SUPER_POOL));
+  return combineWinAnything(n, Math.min(1, n * atLeastThreeMain()));
+}
+
+function combineWinAnything(distinctSupers: number, anyThreeMain: number): number {
+  return 1 - (1 - distinctSupers / SUPER_POOL) * (1 - anyThreeMain);
+}
+
+/**
+ * Exact P(win anything) for concrete tickets: `distinctSupers` distinct Súper
+ * Balotas and the given main-number sets, by enumerating every one of the
+ * 962 598 possible main draws (about 0.2 s for sixteen tickets).
+ */
+export function winAnythingOf(mains: number[][], distinctSupers: number): number {
+  return combineWinAnything(Math.min(SUPER_POOL, distinctSupers), anyAtLeastThree(mains));
+}
+
+/**
+ * Exact P(some ticket matches ≥ 3 of the five drawn) over all C(43, 5) draws,
+ * for arbitrary (possibly overlapping) tickets. Bitmasks in two 32-bit halves,
+ * since 43 numbers do not fit one.
+ */
+export function anyAtLeastThree(mains: number[][]): number {
+  if (mains.length === 0) return 0;
+  const masks = mains.map((t) => {
+    let lo = 0;
+    let hi = 0;
+    for (const n of t) {
+      if (n <= 32) lo |= 1 << (n - 1);
+      else hi |= 1 << (n - 33);
+    }
+    return [lo >>> 0, hi >>> 0] as const;
+  });
+  const c = [0, 1, 2, 3, 4];
+  let count = 0;
+  let total = 0;
+  for (;;) {
+    total++;
+    let lo = 0;
+    let hi = 0;
+    for (const i of c) {
+      if (i < 32) lo |= 1 << i;
+      else hi |= 1 << (i - 32);
+    }
+    for (const [tl, th] of masks) {
+      if (popcount((lo & tl) >>> 0) + popcount((hi & th) >>> 0) >= 3) {
+        count++;
+        break;
+      }
+    }
+    let k = MAIN_PICK - 1;
+    while (k >= 0 && c[k] === MAIN_POOL - MAIN_PICK + k) k--;
+    if (k < 0) break;
+    c[k]!++;
+    for (let j = k + 1; j < MAIN_PICK; j++) c[j] = c[j - 1]! + 1;
+  }
+  return count / total;
+}
+
+function popcount(x: number): number {
+  let n = 0;
+  while (x) {
+    x &= x - 1;
+    n++;
+  }
+  return n;
+}
+
+/**
+ * `n` main-number sets that share as little as the pool allows: eight
+ * disjoint blocks of five, then each further ticket takes the five least-used
+ * numbers while avoiding two numbers from any one earlier ticket (a pair
+ * sharing two numbers costs 351 draws, two pairs sharing one each cost 72).
+ * Deterministic; sorted ascending within a ticket.
+ */
+export function spreadTickets(n: number): number[][] {
+  const tickets: number[][] = [];
+  const usage = new Array<number>(MAIN_POOL + 1).fill(0);
+  for (let t = 0; t < Math.min(n, MAX_DISJOINT_TICKETS); t++) {
+    const block = Array.from({ length: MAIN_PICK }, (_, i) => t * MAIN_PICK + i + 1);
+    for (const x of block) usage[x]!++;
+    tickets.push(block);
+  }
+  while (tickets.length < n) {
+    const chosen: number[] = [];
+    const touched = new Set<number>(); // indices of earlier tickets already shared with
+    const candidates = Array.from({ length: MAIN_POOL }, (_, i) => i + 1).sort(
+      (a, b) => usage[a]! - usage[b]! || a - b,
+    );
+    // First pass: least-used numbers, at most one per earlier ticket.
+    for (const x of candidates) {
+      if (chosen.length === MAIN_PICK) break;
+      const owners = tickets.map((t, i) => (t.includes(x) ? i : -1)).filter((i) => i >= 0);
+      if (owners.some((i) => touched.has(i))) continue;
+      chosen.push(x);
+      for (const i of owners) touched.add(i);
+    }
+    // Second pass, only if the pool ran out of such numbers: fill by usage.
+    for (const x of candidates) {
+      if (chosen.length === MAIN_PICK) break;
+      if (!chosen.includes(x)) chosen.push(x);
+    }
+    for (const x of chosen) usage[x]!++;
+    tickets.push(chosen.sort((a, b) => a - b));
+  }
+  return tickets;
 }
 
 /** One candidate way of choosing which Súper Balotas to cover. */
@@ -259,15 +403,23 @@ const topBy = (score: (ball: number) => number, n: number, ascending = false): n
  * favourite. When `superWeights` is absent the crowd rule is left out.
  */
 export function standardSuperRules(priorStrength = 1, superWeights?: number[]): SuperRule[] {
-  const posterior = (past: Draw[]) => superPosterior(past, priorStrength);
+  // The posterior mean is a count ratio; computing it once per call (not once
+  // per ball) keeps the walk-forward tournament linear in the history.
+  const means = (past: Draw[]) => superPosterior(past, priorStrength).map((p) => p.mean);
   const rules: SuperRule[] = [
     {
       name: "highest posterior (hot)",
-      choose: (past, n) => topBy((b) => posterior(past)[b - 1]!.mean, n),
+      choose: (past, n) => {
+        const m = means(past);
+        return topBy((b) => m[b - 1]!, n);
+      },
     },
     {
       name: "lowest posterior (cold)",
-      choose: (past, n) => topBy((b) => posterior(past)[b - 1]!.mean, n, true),
+      choose: (past, n) => {
+        const m = means(past);
+        return topBy((b) => m[b - 1]!, n, true);
+      },
     },
     {
       name: "hot over the last 100",
@@ -320,9 +472,8 @@ export function standardSuperRules(priorStrength = 1, superWeights?: number[]): 
         const counts = new Array<number>(SUPER_POOL + 1).fill(0);
         for (const d of past.slice(-4)) counts[d.super]!++;
         const persistent = allBalls().filter((b) => counts[b]! >= 2);
-        const rest = topBy((b) => posterior(past)[b - 1]!.mean, SUPER_POOL).filter(
-          (b) => !persistent.includes(b),
-        );
+        const m = means(past);
+        const rest = topBy((b) => m[b - 1]!, SUPER_POOL).filter((b) => !persistent.includes(b));
         return [...persistent, ...rest].slice(0, n);
       },
     },
@@ -345,7 +496,13 @@ export interface SuperRuleScore {
   hits: number;
   draws: number;
   rate: number;
-  /** Standard scores against the tickets/16 null. */
+  /**
+   * Hits the rule would make on a fair machine: Σ (distinct balls played)/16
+   * over the scored draws. Equals draws × tickets/16 for a rule that always
+   * plays `tickets` distinct balls.
+   */
+  expected: number;
+  /** Standard score of `hits` against that exact null. */
   z: number;
   /** True when |z| clears the Bonferroni threshold for the whole tournament. */
   beatsChance: boolean;
@@ -359,6 +516,13 @@ export interface SuperRuleScore {
  * by construction unless the machine is unfair. This measures the departure and
  * corrects the threshold for however many rules were tried, which is the step
  * that stops a sixteen-way search from manufacturing a winner.
+ *
+ * The null is taken per draw from what the rule actually played: a rule that
+ * returns a repeated ball, or fewer than `tickets` balls, covers d < tickets
+ * outcomes and hits with probability d/16 on that draw. Hits are then a sum of
+ * independent Bernoullis with mean Σ dᵢ/16 and variance Σ (dᵢ/16)(1 − dᵢ/16),
+ * which is what z is measured against. A rule that returns more than `tickets`
+ * balls is cut to the first `tickets`: the budget is part of the problem.
  */
 export function scoreSuperRules(
   draws: Draw[],
@@ -369,49 +533,43 @@ export function scoreSuperRules(
   const start = Math.min(warmup, draws.length);
   const trials = draws.length - start;
   const hits = rules.map(() => 0);
+  const expected = rules.map(() => 0);
+  const variance = rules.map(() => 0);
   for (let i = start; i < draws.length; i++) {
     const past = draws.slice(0, i);
     const truth = draws[i]!.super;
     rules.forEach((rule, r) => {
-      if (rule.choose(past, tickets).includes(truth)) hits[r]!++;
+      const played = new Set(
+        rule
+          .choose(past, tickets)
+          .slice(0, tickets)
+          .filter((b) => Number.isInteger(b) && b >= 1 && b <= SUPER_POOL),
+      );
+      const p = played.size / SUPER_POOL;
+      expected[r]! += p;
+      variance[r]! += p * (1 - p);
+      if (played.has(truth)) hits[r]!++;
     });
   }
-  const base = tickets / SUPER_POOL;
-  const sd = trials > 0 ? Math.sqrt((base * (1 - base)) / trials) : Infinity;
   // Two-sided 5 % spread over however many rules were entered.
-  const threshold = rules.length > 1 ? bonferroniZ(rules.length) : 1.96;
+  const threshold = rules.length > 1 ? bonferroniZ(rules.length) : bonferroniZ(1);
   return rules.map((rule, r) => {
     const rate = trials > 0 ? hits[r]! / trials : 0;
-    const z = (rate - base) / sd;
+    const sd = Math.sqrt(variance[r]!);
+    const z = sd > 0 ? (hits[r]! - expected[r]!) / sd : 0;
     return {
       name: rule.name,
       hits: hits[r]!,
       draws: trials,
       rate,
+      expected: expected[r]!,
       z,
       beatsChance: Math.abs(z) > threshold,
     };
   });
 }
 
-/** Normal quantile for a two-sided 5 % test spread over `k` comparisons. */
-function bonferroniZ(k: number): number {
-  // Newton on Phi(z) = 1 - 0.025/k, with the usual erf-free normal CDF.
-  const target = 1 - 0.025 / k;
-  let z = 2;
-  for (let i = 0; i < 60; i++) {
-    const cdf = normalCdf(z);
-    const pdf = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
-    z += (target - cdf) / pdf;
-  }
-  return z;
-}
-
-function normalCdf(z: number): number {
-  // Abramowitz & Stegun 26.2.17, good to 7.5e-8 — ample for a threshold.
-  const t = 1 / (1 + 0.2316419 * Math.abs(z));
-  const poly =
-    t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
-  const tail = (Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI)) * poly;
-  return z >= 0 ? 1 - tail : tail;
+/** Normal quantile for a two-sided 5 % test spread over `k` comparisons: Φ⁻¹(1 − 0.025/k). */
+export function bonferroniZ(k: number): number {
+  return normalQuantile(1 - 0.025 / Math.max(1, k));
 }
