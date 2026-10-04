@@ -44,6 +44,18 @@ export function breakdownIsConsistent(tiers: TierResult[] | undefined): boolean 
   });
 }
 
+/**
+ * Where a draw's numbers were read from, in decreasing order of authority.
+ *
+ * - `official`: the operator's own page (baloto.com), with its prize table.
+ * - `archive`: one of the public result archives we scrape. Rows written
+ *   before this field existed carry no value and are read as `archive`.
+ * - `press`: typed in from newspaper or radio reports because no archive had
+ *   the draw yet. Provisional by definition: it is replaced as soon as a
+ *   version with a prize breakdown arrives.
+ */
+export type Provenance = "official" | "archive" | "press";
+
 export interface Draw {
   /** Draw date, YYYY-MM-DD. */
   date: string;
@@ -54,6 +66,27 @@ export interface Draw {
   super: number;
   /** Prize breakdown, when published for that draw. */
   tiers?: TierResult[];
+  /** Origin of the numbers; absent means `archive`. */
+  provenance?: Provenance;
+}
+
+/**
+ * Two sources disagreed about the same draw. Recorded, never resolved
+ * silently: the dataset keeps the better-evidenced version and this entry
+ * says which one lost and why, so every report can disclose it.
+ */
+export interface DrawConflict {
+  date: string;
+  game: Game;
+  /** The version kept in the dataset: five main numbers then the Súper Balota. */
+  kept: number[];
+  keptProvenance: Provenance;
+  /** The version discarded. */
+  rejected: number[];
+  rejectedProvenance: Provenance;
+  reason: string;
+  /** ISO timestamp of the update that noticed the disagreement. */
+  detectedAt: string;
 }
 
 export interface Dataset {
@@ -62,6 +95,13 @@ export interface Dataset {
   /** Where the data came from, for provenance. */
   sources: string[];
   draws: Draw[];
+  /**
+   * Last draw number confirmed on baloto.com (`/resultados-baloto/<n>`), so
+   * the next update can walk forward from it instead of guessing.
+   */
+  officialIndex?: number;
+  /** Disagreements between sources noticed by past updates. */
+  conflicts?: DrawConflict[];
 }
 
 /** Path of the on-disk dataset, inside the CLI's home directory. */
@@ -112,11 +152,23 @@ export function isValidDraw(draw: Draw): boolean {
   return Number.isInteger(draw.super) && draw.super >= 1 && draw.super <= SUPER_POOL;
 }
 
+/**
+ * True when the draw date falls on a night Baloto is actually drawn: Monday,
+ * Wednesday or Saturday. A result dated any other day is a transcription or
+ * parsing error, whatever source it came from.
+ */
+export function isDrawDay(date: string): boolean {
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return weekday === 1 || weekday === 3 || weekday === 6;
+}
+
 /** A draw dropped by `cleanDraws`, kept so the CLI can disclose the edit. */
 export interface Anomaly {
   date: string;
   game: Game;
   reason: string;
+  /** `duplicate` is an archive echo; `conflict` is a source disagreement. */
+  kind?: "duplicate" | "conflict";
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -164,27 +216,178 @@ export function drawsFor(dataset: Dataset, game: Game): Draw[] {
   return cleanDraws(ordered).draws;
 }
 
-/** Everything `drawsFor` silently discards, for disclosure in reports. */
+/**
+ * Everything `drawsFor` silently discards, plus every recorded disagreement
+ * between sources, for disclosure in reports.
+ */
 export function datasetAnomalies(dataset: Dataset): Anomaly[] {
-  return (["baloto", "revancha"] as Game[]).flatMap((game) => {
+  const echoes = (["baloto", "revancha"] as Game[]).flatMap((game) => {
     const ordered = dataset.draws
       .filter((d) => d.game === game && isValidDraw(d))
       .sort((a, b) => a.date.localeCompare(b.date));
-    return cleanDraws(ordered).anomalies;
+    return cleanDraws(ordered).anomalies.map((a) => ({ ...a, kind: "duplicate" as const }));
   });
+  const conflicts = (dataset.conflicts ?? []).map((c) => ({
+    date: c.date,
+    game: c.game,
+    kind: "conflict" as const,
+    reason:
+      `sources disagree: kept ${c.kept.join(" ")} (${c.keptProvenance}), ` +
+      `rejected ${c.rejected.join(" ")} (${c.rejectedProvenance}) — ${c.reason}`,
+  }));
+  return [...echoes, ...conflicts].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** Merge freshly scraped draws into an existing dataset, newest data winning. */
-export function mergeDraws(existing: Draw[], incoming: Draw[]): Draw[] {
+export function provenanceOf(draw: Draw): Provenance {
+  return draw.provenance ?? "archive";
+}
+
+const PROVENANCE_RANK: Record<Provenance, number> = { press: 0, archive: 1, official: 2 };
+
+function hasBreakdown(draw: Draw): boolean {
+  return breakdownIsConsistent(draw.tiers);
+}
+
+function sameNumbers(a: Draw, b: Draw): boolean {
+  return a.super === b.super && a.main.join() === b.main.join();
+}
+
+function numbersOf(draw: Draw): number[] {
+  return [...draw.main, draw.super];
+}
+
+/**
+ * Evidence ranking used when two sources disagree about one draw. A version
+ * backed by the operator's own prize table outranks everything; any
+ * consistent prize breakdown outranks bare numbers (a breakdown is published
+ * once, against the real result, and it has to multiply out); then the
+ * provenance order official > archive > press.
+ */
+function evidence(draw: Draw): number {
+  const provenance = provenanceOf(draw);
+  const breakdown = hasBreakdown(draw);
+  return (
+    (provenance === "official" && breakdown ? 100 : 0) +
+    (breakdown ? 10 : 0) +
+    PROVENANCE_RANK[provenance]
+  );
+}
+
+export interface Reconciliation {
+  draws: Draw[];
+  /** Disagreements found in this merge, one per date and game. */
+  conflicts: DrawConflict[];
+  /** Press-sourced rows upgraded to a version with a prize breakdown. */
+  confirmed: number;
+}
+
+/**
+ * Merge freshly fetched draws into an existing dataset without ever
+ * overwriting numbers silently.
+ *
+ * Same numbers: the two versions are combined — the best provenance is kept,
+ * a prize breakdown is never lost, and an official breakdown replaces an
+ * archive one. A `press` row whose numbers are confirmed by a version with a
+ * breakdown is upgraded in place (`confirmed`).
+ *
+ * Different numbers: the version with more evidence (`evidence`) wins and the
+ * disagreement is recorded. On equal evidence the existing row stays, because
+ * a refetch that contradicts what we already checked is a reason to look, not
+ * a reason to change the dataset.
+ */
+export function reconcileDraws(
+  existing: Draw[],
+  incoming: Draw[],
+  detectedAt = new Date().toISOString(),
+): Reconciliation {
   const byKey = new Map<string, Draw>();
   for (const draw of existing) byKey.set(`${draw.date}:${draw.game}`, draw);
+  const conflicts: DrawConflict[] = [];
+  let confirmed = 0;
+
   for (const draw of incoming) {
     const key = `${draw.date}:${draw.game}`;
     const prev = byKey.get(key);
-    // Never drop a prize breakdown we already have because of a thinner refetch.
-    byKey.set(key, prev?.tiers && !draw.tiers ? { ...draw, tiers: prev.tiers } : draw);
+    if (!prev) {
+      byKey.set(key, draw);
+      continue;
+    }
+
+    if (sameNumbers(prev, draw)) {
+      const prevRank = PROVENANCE_RANK[provenanceOf(prev)];
+      const nextRank = PROVENANCE_RANK[provenanceOf(draw)];
+      const best = nextRank > prevRank ? provenanceOf(draw) : provenanceOf(prev);
+      // Never drop a prize breakdown we already have because of a thinner
+      // refetch; let an official one replace an archive one.
+      const incomingOfficial = provenanceOf(draw) === "official" && hasBreakdown(draw);
+      const tiers = incomingOfficial
+        ? draw.tiers
+        : prev.tiers && prev.tiers.length > 0
+          ? prev.tiers
+          : draw.tiers;
+      if (provenanceOf(prev) === "press" && !hasBreakdown(prev) && hasBreakdown(draw)) {
+        confirmed++;
+      }
+      const merged: Draw = { ...prev, ...draw, main: draw.main, super: draw.super };
+      if (tiers) merged.tiers = tiers;
+      else delete merged.tiers;
+      if (best === "archive") delete merged.provenance;
+      else merged.provenance = best;
+      byKey.set(key, merged);
+      continue;
+    }
+
+    const prevEvidence = evidence(prev);
+    const nextEvidence = evidence(draw);
+    const winner = nextEvidence > prevEvidence ? draw : prev;
+    const loser = winner === draw ? prev : draw;
+    const reason =
+      nextEvidence === prevEvidence
+        ? "equal evidence on both sides; the version already stored was kept"
+        : hasBreakdown(winner) && !hasBreakdown(loser)
+          ? "the kept version carries a consistent prize breakdown"
+          : `${provenanceOf(winner)} outranks ${provenanceOf(loser)}`;
+    conflicts.push({
+      date: draw.date,
+      game: draw.game,
+      kept: numbersOf(winner),
+      keptProvenance: provenanceOf(winner),
+      rejected: numbersOf(loser),
+      rejectedProvenance: provenanceOf(loser),
+      reason,
+      detectedAt,
+    });
+    byKey.set(key, winner);
   }
-  return [...byKey.values()].sort(
+
+  const draws = [...byKey.values()].sort(
     (a, b) => a.date.localeCompare(b.date) || a.game.localeCompare(b.game),
   );
+  return { draws, conflicts, confirmed };
+}
+
+/** Merge freshly scraped draws into an existing dataset; see `reconcileDraws`. */
+export function mergeDraws(existing: Draw[], incoming: Draw[]): Draw[] {
+  return reconcileDraws(existing, incoming).draws;
+}
+
+/**
+ * Append newly found conflicts to the ones already recorded, without
+ * repeating an entry the previous update already wrote for the same
+ * disagreement (an archive that keeps serving the wrong numbers would
+ * otherwise add a line per run).
+ */
+export function appendConflicts(
+  recorded: DrawConflict[] | undefined,
+  found: DrawConflict[],
+): DrawConflict[] {
+  const out = [...(recorded ?? [])];
+  const seen = new Set(out.map((c) => `${c.date}:${c.game}:${c.kept.join()}:${c.rejected.join()}`));
+  for (const conflict of found) {
+    const key = `${conflict.date}:${conflict.game}:${conflict.kept.join()}:${conflict.rejected.join()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(conflict);
+  }
+  return out;
 }

@@ -121,7 +121,8 @@ baloto
   .option("--full", "Re-download every year instead of only recent ones")
   .option("--no-prizes", "Skip the per-draw prize breakdown (far fewer requests)")
   .option("--verify", "Cross-check the results against a second public archive")
-  .action(async (opts: { full?: boolean; prizes?: boolean; verify?: boolean }) => {
+  .option("--no-official", "Skip reading the latest draws from baloto.com")
+  .action(async (opts: { full?: boolean; prizes?: boolean; verify?: boolean; official?: boolean }) => {
     const { updateCommand } = await import("./commands/baloto.ts");
     await updateCommand(opts);
   });

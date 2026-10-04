@@ -70,11 +70,13 @@ export async function updateCommand(opts: {
   full?: boolean;
   prizes?: boolean;
   verify?: boolean;
+  official?: boolean;
 }): Promise<void> {
   const result = await updateHistory({
     full: opts.full,
     skipPrizes: opts.prizes === false,
     verify: opts.verify,
+    official: opts.official !== false,
     onProgress: (message) => console.log(c.dim(message)),
   });
 
@@ -84,6 +86,42 @@ export async function updateCommand(opts: {
   console.log(`  with prize details:  ${result.withPrizes}`);
   if (result.rejected > 0) {
     console.log(c.yellow(`  rejected (old format): ${result.rejected}`));
+  }
+  const press = result.dataset.draws.filter((d) => d.provenance === "press").length;
+  if (press > 0) {
+    console.log(c.yellow(`  provisional (press):   ${press} — replaced when a version with a prize table arrives`));
+  }
+
+  const official = result.official;
+  if (official) {
+    if (official.error) {
+      console.log(c.yellow(`  baloto.com:          not read — ${official.error}`));
+    } else {
+      const span =
+        official.indices.length > 0
+          ? `draw(s) ${official.indices[0]}–${official.indices[official.indices.length - 1]}`
+          : "nothing new";
+      console.log(
+        c.green(
+          `  baloto.com:          ${span} (${official.fetched} rows), last known draw ${official.lastIndex ?? "?"}` +
+            (official.confirmed > 0 ? `, ${official.confirmed} press row(s) confirmed` : ""),
+        ),
+      );
+      for (const w of official.warnings) console.log(c.yellow(`    ${w}`));
+    }
+  }
+
+  if (result.conflicts.length > 0) {
+    console.log("");
+    console.log(c.yellow(c.bold(`Sources disagree on ${result.conflicts.length} draw(s) — recorded, not overwritten:`)));
+    for (const k of result.conflicts) {
+      console.log(
+        c.yellow(
+          `  ${k.date} ${k.game}: kept ${k.kept.join(" ")} (${k.keptProvenance}), ` +
+            `rejected ${k.rejected.join(" ")} (${k.rejectedProvenance}) — ${k.reason}`,
+        ),
+      );
+    }
   }
 
   for (const report of result.verification) {
