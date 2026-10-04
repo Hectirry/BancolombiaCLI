@@ -22,3 +22,6 @@ storage-state.json
 .DS_Store
 .idea/
 .vscode/
+
+# Agent worktrees (temporary, created by Claude Code)
+.claude/worktrees/
