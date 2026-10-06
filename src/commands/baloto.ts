@@ -1439,3 +1439,161 @@ export async function algorithmsCommand(opts: {
     ),
   );
 }
+
+/**
+ * `baloto postmortem` — "why didn't you hit?", answered in two separate
+ * ledgers: what the model itself forecast for the window (3/16 a night, an
+ * exact binomial, an exact drought), and the counterfactual over every rule
+ * in the tournament, read against the maximum a dozen rules reach on a fair
+ * machine by chance. The full tournament sits beside it because it alone can
+ * change a recommendation; a window never does.
+ */
+export async function postmortemCommand(opts: {
+  game?: string;
+  draws?: string;
+  tickets?: string;
+  sims?: string;
+  seed?: string;
+  warmup?: string;
+  prior?: string;
+}): Promise<void> {
+  const game = parseGame(opts.game);
+  const dataset = await requireDataset();
+  const draws = drawsFor(dataset, game);
+  const nights = opts.draws ? Number.parseInt(opts.draws, 10) : 12;
+  const tickets = opts.tickets ? Number.parseInt(opts.tickets, 10) : 3;
+  const sims = opts.sims ? Number.parseInt(opts.sims, 10) : 20_000;
+  const seed = opts.seed ? Number.parseInt(opts.seed, 10) : 1;
+  const warmup = opts.warmup ? Number.parseInt(opts.warmup, 10) : 400;
+  const priorStrength = opts.prior ? Number(opts.prior) : 1;
+  if (!Number.isInteger(nights) || nights < 1) throw new Error("--draws must be a positive integer.");
+  if (!Number.isInteger(tickets) || tickets < 1 || tickets > SUPER_POOL) {
+    throw new Error(`--tickets must be between 1 and ${SUPER_POOL}.`);
+  }
+
+  const { standardSuperRules } = await import("../baloto/superball.ts");
+  const { algorithmSuperRules } = await import("../baloto/algorithms.ts");
+  const { hmmSuperRule } = await import("../baloto/regime.ts");
+  const { postmortem } = await import("../baloto/postmortem.ts");
+  const { loadLedger, scoreLedger } = await import("../baloto/ledger.ts");
+  // The same field `super` enters, crowd rule included when the bias model exists.
+  const { model: bias } = await loadBiasModel(game);
+  const rules = [...standardSuperRules(priorStrength, bias.super), ...algorithmSuperRules(), hmmSuperRule()];
+  const pm = postmortem(draws, rules, { draws: nights, tickets, sims, seed, warmup });
+  const k = pm.window.length;
+  const first = pm.window[0]?.date ?? "—";
+  const last = pm.window[k - 1]?.date ?? "—";
+  const signed = (z: number) => `${z >= 0 ? "+" : ""}${z.toFixed(2)}`;
+  const tournamentDraws = pm.tournament?.[0]?.draws ?? 0;
+
+  console.log(c.bold(`Post-mortem — last ${k} draws of ${game} (${first} → ${last})`));
+  console.log(c.dim(`  Súper Balotas drawn: ${pm.window.map((d) => d.super).join(", ")}`));
+  console.log("");
+
+  // 1. What the model promised, against what happened.
+  console.log(c.bold("  1. The model's own forecast"));
+  if (pm.model) {
+    const m = pm.model;
+    console.log(
+      `  Live rule "${m.name}" played ${m.played[k - 1]?.join(", ") ?? "—"} on the last night; ${tickets} distinct balls hit ` +
+        `${pct(tickets / SUPER_POOL)} a night, so a miss (${pct(m.perNightMiss)}) is the forecast for any single night.`,
+    );
+    console.log(
+      `  Hits: ${m.hits} of ${k} nights against ${m.expected.toFixed(2)} expected. Exact: P(≤ ${m.hits}) = ${pct(m.pAtMost)}, ` +
+        `P(≥ ${m.hits}) = ${pct(m.pAtLeast)}.`,
+    );
+    const { current, longest, pCurrent, pLongest } = m.drought;
+    console.log(
+      current > 0
+        ? `  Drought: ${current} night(s) without a hit, exactly ${pct(pCurrent)} likely under the model` +
+          ` ((${SUPER_POOL - Math.min(tickets, SUPER_POOL)}/16)^${current}); the longest run in the window is ${longest},` +
+          ` and a run that long or longer appears in ${pct(pLongest)} of fair windows of ${k}.`
+        : `  The last night hit. Longest run of misses in the window: ${longest} (${pct(pLongest)} of fair windows have one that long).`,
+    );
+  } else {
+    console.log(c.dim("  The live rule is not in this tournament; no model row."));
+  }
+
+  // The ledger: nights actually recorded before their draw, inside the window.
+  const ledger = await loadLedger();
+  const windowDates = new Set(pm.window.map((d) => d.date));
+  const recorded = ledger.entries.filter((e) => e.game === game && windowDates.has(e.targetDate));
+  if (recorded.length > 0) {
+    const allDraws = [...drawsFor(dataset, "baloto"), ...drawsFor(dataset, "revancha")];
+    const score = scoreLedger({ entries: recorded }, allDraws);
+    console.log(
+      c.dim(
+        `  Ledger (stated before the draw): ${score.superHits} hit(s) in ${score.scored.length} recorded night(s), ` +
+          `${score.superExpected.toFixed(2)} expected` +
+          (score.superPValue !== null ? `, two-sided exact p = ${score.superPValue.toFixed(3)}` : "") +
+          `; current drought ${score.streak.current} night(s), ${pct(score.streak.pCurrent)} under the model.`,
+      ),
+    );
+    console.log(
+      c.dim(
+        `  The ${k}-draw window replays the rule on every draw; the ledger only counts nights the model was actually on record for.`,
+      ),
+    );
+  }
+  console.log("");
+
+  // 2. Every rule, in hindsight — with the hindsight priced.
+  console.log(c.bold(`  2. Counterfactual: every rule over the same ${k} nights (each expects ${pm.expectedPerRule.toFixed(2)})`));
+  const byName = new Map((pm.tournament ?? []).map((t) => [t.name, t]));
+  console.log(
+    table(
+      ["RULE", `HITS/${k}`, "EXPECTED", "P(≥ HITS)", "LAST NIGHT PLAYED", `TOURNAMENT (${tournamentDraws})`, "Z", "REAL?"],
+      pm.rules
+        .slice()
+        .sort((a, b) => b.hits - a.hits || a.name.localeCompare(b.name))
+        .map((r) => {
+          const t = byName.get(r.name);
+          const live = pm.model !== null && r.name === pm.model.name;
+          return [
+            live ? c.cyan(`${r.name} (live)`) : r.name,
+            r.hits === pm.max.observed ? c.yellow(String(r.hits)) : String(r.hits),
+            r.expected.toFixed(2),
+            pct(r.pAtLeast),
+            r.played[k - 1]?.join(", ") ?? "—",
+            t ? `${t.hits}/${t.draws} = ${pct(t.rate)}` : "—",
+            t ? signed(t.z) : "—",
+            t ? (t.beatsChance ? c.green("yes") : c.dim("no")) : "—",
+          ];
+        }),
+    ),
+  );
+  console.log("");
+  console.log(
+    `  Best in hindsight: ${pm.max.observed} hit(s) — ${pm.max.rules.join("; ")}.\n` +
+      `  On a fair machine the best of these ${pm.rules.length} rules reaches ${pm.max.observed} or more in ${pct(pm.max.pAtLeast)} of ` +
+      `${k}-night windows (Monte Carlo, ${pm.max.sims.toLocaleString("es-CO")} windows, plays held fixed, outcomes redrawn);\n` +
+      `  the expected best is ${pm.max.expectedMax.toFixed(2)}. ` +
+      (pm.max.pAtLeast > 0.05
+        ? "That is what trying many rules on a dozen nights looks like, not a signal."
+        : "That is unusual for the window; the tournament column says whether it survives the full history."),
+  );
+  console.log("");
+
+  // 3. The verdict, on the only time scale that counts.
+  const winners = (pm.tournament ?? []).filter((t) => t.beatsChance);
+  console.log(c.bold("  3. Verdict"));
+  if (winners.length === 0) {
+    const strongest = (pm.tournament ?? []).slice().sort((a, b) => Math.abs(b.z) - Math.abs(a.z))[0];
+    console.log(
+      `  No rule clears |z| > ${pm.threshold.toFixed(2)} (Bonferroni over ${pm.rules.length}) in the full walk-forward tournament` +
+        (strongest ? `; the strongest is "${strongest.name}" at z = ${signed(strongest.z)}` : "") +
+        ".\n  Nothing changes: coverage stays N/16 with distinct balls, the order stays the posterior tiebreak, and the\n" +
+        `  window above is the model doing what it said it would do. ${k} nights cannot overturn ${tournamentDraws} draws.`,
+    );
+  } else {
+    console.log(
+      c.yellow(
+        `  ${winners.map((w) => `"${w.name}" (z = ${signed(w.z)})`).join(", ")} clear the tournament threshold.\n` +
+          "  That is news on the full history, not on a window: re-run `baloto super` and read its tournament table before acting.",
+      ),
+    );
+  }
+  console.log(
+    c.dim("  The ledger never refits anything; the tournament does. Payout, co-winners and RTP are not criteria here."),
+  );
+}

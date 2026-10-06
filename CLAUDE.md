@@ -209,3 +209,17 @@ a verdict would need (`nightsToDistinguish`: 18.75 % vs 25 % takes 327
 nights). Record every recommendation handed to the owner. Never score from
 memory, and never backfill an entry that was not stated before its draw. The
 ledger never changes a model; the tournament does.
+
+When the owner asks "¿por qué no acertaste?", run `baloto postmortem`
+(`src/baloto/postmortem.ts`, default `--draws 12`) instead of reasoning from
+the last few results. It separates the model's own forecast (13/16 a night;
+exact binomial tails for the hit count; exact (13/16)ⁿ for the drought) from
+the counterfactual over every tournament rule, and prices the hindsight: the
+probability that the *best* of the rules reaches the observed maximum on a
+fair machine, by Monte Carlo over the maximum of correlated binomials (plays
+held fixed, outcomes redrawn). On 2026-10-06, over the 12 draws since the
+model went live: 2 hits against 2.25 expected (P(≤ 2) = 60 %), a 10-night
+drought at 12.5 %, best rule in hindsight 5/12 while the best of 13 reaches
+≥ 5 in 44 % of fair windows, no rule past |z| 2.89 on 575 draws. A window
+never changes a recommendation; the full tournament column in the same table
+is the only thing that can.
