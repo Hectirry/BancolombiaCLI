@@ -127,6 +127,7 @@ a tiebreak.
 | Self-exciting point process (Hawkes-like: P(ball\|seen in last w)) | the "persist" / hot-hand effect | TESTED 2026-10-04: ratio 1.12 (w=1), 1.04, 1.02, 1.01 (w=2,4,6) against 1.00; all inside the fair 95 % band (p 0.19–0.40) |
 | Hidden Markov / regime models | latent machine states | TESTED 2026-10-04 `regime`: 2-state HMM log-lik −2687.6 vs i.i.d. −2693.3, but BIC 5602 vs 5490 — i.i.d. wins by 112 nats; the HMM predictive is ENTERED in the tournament (117/574, z=+1.00) |
 | Dependence between Baloto and Revancha (same night) | shared machine quirks | TESTED 2026-10-04 `regime`: 16×16 permutation χ² = 239.6, p = 0.25; same Súper 47 vs 60.9 expected (p = 0.98) — independent |
+| The leading rule's "cold" family (windows 50/100/200, recency-weighted, rank-sum ensemble, cold-and-absent), pre-registered | whether "cold" at z = +1.62 is signal or the max of 13 noises | TESTED 2026-10-06 `docs/PRERREGISTRO.md`: a uniform prior never changes the cold order (monotone in the count); the reported cell (n=3, warmup 400) is the max of a 16-cell grid; all excess sits in the middle third (z +2.40, outer thirds +0.03/+0.37); fair Monte Carlo of the rule itself gives P(z ≥ 1.62) = 0.058; cold played 11 triples, modal 6-9-15 (fixed z +1.20, rank 75/560), today's 1-4-8 ranks 535/560; six variants ENTERED (`coldFamilyRules`), all within ±1.05 against a 19-rule threshold of 3.01. Live hypothesis needs 1 767 nights. Verdict: noise. |
 
 ### Information theory & algorithmic randomness
 | Area | What it would catch | Status |
