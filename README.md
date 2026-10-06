@@ -226,6 +226,7 @@ bancolombia baloto regime                   # hidden-Markov regimes vs i.i.d. by
 bancolombia baloto super -n 2 --revancha    # the same tickets in both of the night's draws: 1 − (1 − N/16)²
 bancolombia baloto super -n 3 --record      # …and write the tickets to the ledger before the draw
 bancolombia baloto score                    # every recorded recommendation vs the draw that followed
+bancolombia baloto postmortem --draws 12    # why the last draws were missed, and what chance alone would have "found"
 ```
 
 ### The ledger: the model's word, on the record, before the draw
@@ -241,6 +242,19 @@ could mean anything (18.75 % vs 25 % takes 327 nights; vs 21 %, 2 425). It
 exists so that scoring is never done from memory or in hindsight — and it
 never refits anything; only the walk-forward tournament can change a
 recommendation.
+
+When a run of misses raises "why didn't you hit?", `baloto postmortem`
+answers it in two separate columns. First the model's own forecast for the
+last K draws: a miss is 13/16 a night, the hit count is an exact binomial
+(2 of 12 at 3/16 has P(≤ 2) = 60 %), and a drought has an exact probability
+((13/16)¹⁰ = 12.5 %). Then the counterfactual: every rule in the tournament
+replayed over the same nights, with the one figure that keeps hindsight
+honest — how often the *best* of those rules reaches the observed maximum on
+a fair machine (Monte Carlo over the maximum of correlated binomials, the
+plays held fixed and only the outcomes redrawn). On 2026-10-05 the best rule
+in hindsight hit 5 of 12 against 2.25 expected; the best of thirteen rules
+reaches 5 or more in 44 % of fair windows. Beside both sits the full
+tournament z, which alone can change anything.
 
 ### Regimes and the second machine
 

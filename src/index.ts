@@ -275,6 +275,21 @@ baloto
   });
 
 baloto
+  .command("postmortem")
+  .description("Why the last draws were missed: the model's own forecast, every rule in hindsight, and what chance alone reaches")
+  .option("-g, --game <game>", "baloto or revancha", "baloto")
+  .option("--draws <number>", "How many of the latest draws to look back over", "12")
+  .option("-n, --tickets <number>", "Tickets (distinct Súper Balotas) each rule is allowed", "3")
+  .option("--sims <number>", "Fair windows simulated for the maximum over rules", "20000")
+  .option("--seed <number>", "Seed for that simulation", "1")
+  .option("--warmup <number>", "Draws reserved before the full tournament scores", "400")
+  .option("--prior <number>", "Dirichlet strength for the posterior rules", "1")
+  .action(async (opts: Record<string, string>) => {
+    const { postmortemCommand } = await import("./commands/baloto.ts");
+    await postmortemCommand(opts as never);
+  });
+
+baloto
   .command("regime")
   .description("Hidden-Markov regimes vs i.i.d. by BIC, and Baloto × Revancha independence")
   .option("--states <number>", "Hidden states to fit", "2")
