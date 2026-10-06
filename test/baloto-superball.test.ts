@@ -5,6 +5,7 @@ import {
   anyAtLeastThree,
   atLeastThreeMain,
   bonferroniZ,
+  coldFamilyRules,
   nightCoverage,
   nightCoverageForBudget,
   planSuperCoverage,
@@ -431,5 +432,56 @@ describe("nightCoverage", () => {
       expect(Math.abs(mc.superHit - exact.superHit)).toBeLessThan(4 * se(exact.superHit));
       expect(Math.abs(mc.winAnything - exact.winAnything)).toBeLessThan(4 * se(exact.winAnything));
     }
+  });
+});
+
+describe("coldFamilyRules (pre-registered 2026-10-06)", () => {
+  const draws = history(900, 11);
+
+  test("six variants, all in the standing tournament", () => {
+    expect(coldFamilyRules()).toHaveLength(6);
+    const names = standardSuperRules().map((r) => r.name);
+    for (const rule of coldFamilyRules()) expect(names).toContain(rule.name);
+  });
+
+  test("every variant plays distinct, valid balls, exactly as many as asked", () => {
+    for (const rule of coldFamilyRules()) {
+      for (const n of [1, 3, 5]) {
+        const balls = rule.choose(draws.slice(0, 500), n);
+        expect(balls).toHaveLength(n);
+        expect(new Set(balls).size).toBe(n);
+        for (const b of balls) expect(b >= 1 && b <= SUPER_POOL).toBe(true);
+      }
+    }
+  });
+
+  test("a uniform prior never changes the cold order, so 'cold with a strong prior' is the same rule", () => {
+    const pick = (prior: number) =>
+      standardSuperRules(prior).find((r) => r.name === "lowest posterior (cold)")!.choose(draws.slice(0, 700), 16);
+    expect(pick(10)).toEqual(pick(1));
+    expect(pick(100)).toEqual(pick(1));
+  });
+
+  test("a windowed variant only looks at its window", () => {
+    const rule = coldFamilyRules().find((r) => r.name === "cold over the last 50")!;
+    // Ball 3 absent from the last fifty draws, every other ball present, so it must come first.
+    const recent = Array.from({ length: 50 }, (_, i) => ({ ...draws[i]!, super: 1 + (i % SUPER_POOL) })).map((d) =>
+      d.super === 3 ? { ...d, super: 4 } : d,
+    );
+    const tail = [...draws.slice(0, 500), ...recent];
+    expect(rule.choose(tail, 1)).toEqual([3]);
+  });
+
+  test("'absent from the last 10' never plays a ball seen in the last ten draws when it can avoid it", () => {
+    const rule = coldFamilyRules().find((r) => r.name === "cold and absent from the last 10")!;
+    const tail = draws.slice(0, 600);
+    const recent = new Set(tail.slice(-10).map((d) => d.super));
+    for (const b of rule.choose(tail, 3)) expect(recent.has(b)).toBe(false);
+  });
+
+  test("none of the variants beats chance on a fair machine", () => {
+    const scores = scoreSuperRules(draws, coldFamilyRules(), 3, 400);
+    expect(scores.every((s) => !s.beatsChance)).toBe(true);
+    for (const s of scores) expect(s.expected).toBeCloseTo((s.draws * 3) / SUPER_POOL, 8);
   });
 });

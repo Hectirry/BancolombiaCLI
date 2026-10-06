@@ -555,6 +555,9 @@ export function standardSuperRules(priorStrength = 1, superWeights?: number[]): 
       choose: (_, n) => allBalls().slice(0, n),
     },
   ];
+  // The pre-registered cold family (2026-10-06) stays in the standing
+  // tournament so its record accumulates with every new draw.
+  rules.push(...coldFamilyRules());
   if (superWeights && superWeights.length === SUPER_POOL) {
     rules.push({
       name: "least played by the crowd",
@@ -562,6 +565,87 @@ export function standardSuperRules(priorStrength = 1, superWeights?: number[]): 
     });
   }
   return rules;
+}
+
+/** Súper Balota counts over the last `window` draws of `past` (all of it when `window` is 0). */
+function windowCounts(past: Draw[], window = 0): number[] {
+  const counts = new Array<number>(SUPER_POOL).fill(0);
+  const slice = window > 0 ? past.slice(-window) : past;
+  for (const d of slice) counts[d.super - 1]!++;
+  return counts;
+}
+
+/**
+ * The "cold" family, pre-registered on 2026-10-06 (docs/PRERREGISTRO.md)
+ * before any of it was measured.
+ *
+ * "Lowest posterior (cold)" led the tournament at 123/575 (z = +1.62, under
+ * the Bonferroni 2.84 for 13 rules). Being the best of thirteen noisy scores
+ * is exactly what the maximum of thirteen fair rules looks like, so instead of
+ * polishing that one rule after the fact, its natural variants were written
+ * down first and then all scored together, with the threshold widened to the
+ * whole field (19 rules: Φ⁻¹(1 − 0.025/19) = 2.99). Two facts framed the
+ * design:
+ *
+ * 1. A uniform Dirichlet prior never changes the cold order. The posterior
+ *    mean (count + α)/(N + 16α) is monotone in the count for any α, so "cold
+ *    with a strong prior" is literally the same rule; it is not entered twice.
+ *    The one place a prior could matter is *inside a window*, and there too
+ *    it is monotone in the window count. Hence the variants differ by window
+ *    and by how recency is weighted, never by prior.
+ * 2. Ties are broken the same way everywhere — by the full-history count,
+ *    then by ball number ascending — so that every variant is deterministic
+ *    and no choice is hidden in `sort` stability.
+ *
+ * Each rule plays `n` distinct balls, so its null is exactly n/16 per draw.
+ */
+export function coldFamilyRules(): SuperRule[] {
+  // Ascending by `score`, then by full-history count ascending, then by ball.
+  const coldest = (score: number[], past: Draw[], n: number): number[] => {
+    const full = windowCounts(past);
+    return allBalls()
+      .sort((a, b) => score[a - 1]! - score[b - 1]! || full[a - 1]! - full[b - 1]! || a - b)
+      .slice(0, n);
+  };
+  const windowed = (window: number): SuperRule => ({
+    name: `cold over the last ${window}`,
+    choose: (past, n) => coldest(windowCounts(past, window), past, n),
+  });
+  return [
+    windowed(200),
+    windowed(100),
+    windowed(50),
+    {
+      name: "cold, recency-weighted (half-life 100)",
+      choose: (past, n) => {
+        const score = new Array<number>(SUPER_POOL).fill(0);
+        const last = past.length - 1;
+        past.forEach((d, i) => (score[d.super - 1]! += 0.5 ** ((last - i) / 100)));
+        return coldest(score, past, n);
+      },
+    },
+    {
+      name: "cold ensemble: rank-sum over 50/100/200/all",
+      choose: (past, n) => {
+        const rankSum = new Array<number>(SUPER_POOL).fill(0);
+        for (const window of [50, 100, 200, 0]) {
+          const counts = windowCounts(past, window);
+          const order = allBalls().sort((a, b) => counts[a - 1]! - counts[b - 1]! || a - b);
+          order.forEach((ball, rank) => (rankSum[ball - 1]! += rank));
+        }
+        return coldest(rankSum, past, n);
+      },
+    },
+    {
+      name: "cold and absent from the last 10",
+      choose: (past, n) => {
+        const recent = new Set(past.slice(-10).map((d) => d.super));
+        // Balls seen in the last ten go to the back; within each group, coldest first.
+        const score = allBalls().map((b) => (recent.has(b) ? 1 : 0));
+        return coldest(score, past, n);
+      },
+    },
+  ];
 }
 
 export interface SuperRuleScore {
