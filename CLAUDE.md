@@ -35,6 +35,15 @@ Rules that follow from that objective, all of them measured:
    projection, plus a two-state hidden-Markov predictive and the "persist"
    streak rule: every one lands inside the noise band around N/16 (574 draws,
    thirteen rules; best "cold" z = +1.54, worst "fixed 1-2-3" z = −1.67).
+   Since 2026-10-06 the tournament also enters five **meta-rules**
+   (`src/baloto/meta.ts`, nested walk-forward: each reads only the base
+   rules' record on draws before the one it predicts): follow the leader,
+   Bayesian average of rules (β = 0.5, 1), contrarian to the leader, and a
+   recency ensemble. Eighteen rules, Bonferroni |z| > 2.99: follow the leader
+   112/575 (z = +0.45), both averages +0.45/+0.23, contrarian −1.05, recency
+   ensemble 129/575 (z = +2.26, the field's best, and exactly what a fair
+   machine hands the best of fourteen rules in 24 % of histories — Monte
+   Carlo, 200 fair tournaments, median best |z| 1.90). Nothing clears.
    No ball is distinguishable from 1/16 once all sixteen intervals are read
    simultaneously (Bonferroni over 16: Φ⁻¹(1 − 0.025/16) = 2.9552, computed by
    `bonferroniZ`; an earlier hard-coded 2.8945 was a 6 % family level and was
@@ -180,10 +189,12 @@ That is a watch item, not a lever: over-uniformity cannot be bet on.
 | Minority game / crowd avoidance | sharing fewer prizes | TESTED `bias`, `pick`, `realized` (+6.9 % realised, out of sample) — a **payout** tool, excluded from `super` by the owner |
 | Kelly criterion / bankroll | how much to stake | N/A for a negative-expectation bet: Kelly fraction is ≤ 0 below the breakeven jackpot; this is budgeting, not prediction |
 | Optimal stopping | *when* to play | TESTED `ev` / `forecast` (jackpot threshold, Mondays) — payout side, see `docs/ESTRATEGIA.md` |
+| Meta-rules / online model selection (follow the leader, exponential-weights average, contrarian, recency ensemble) | a base rule whose *record* predicts its next hit | TESTED 2026-10-06 `meta.ts`, ENTERED in the `super` tournament: all five inside noise (best +2.26 vs 2.99 over 18 rules). On a fair machine every base rule hits each draw at n/16 regardless of its record, so a selector among them covers n distinct balls and hits at exactly n/16 too: it can only inherit skill, never create it. The leader on the real history (standard base) was "persist" 347 draws and "hot" 228, switching nine times — a random walk being chased. |
 
 ### What this registry means operationally
-1. Prediction of *which* numbers: eleven Súper rules, fourteen main-number
-   strategies, and six information-theoretic tests say the same thing. The
+1. Prediction of *which* numbers: eighteen Súper rules (thirteen base, five
+   meta), fourteen main-number strategies, and six information-theoretic
+   tests say the same thing. The
    working hypothesis is exchangeability, and the burden of proof is on any
    new technique, in a tournament, at the Bonferroni threshold.
 2. The only exact levers are coverage (rule 2) and disjointness (rule 5).
