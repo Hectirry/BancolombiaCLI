@@ -945,6 +945,7 @@ export async function superCommand(opts: {
   const revancha = opts.revancha === true;
 
   const {
+    bonferroniZ,
     nightCoverage,
     nightCoverageForBudget,
     planSuperCoverage,
@@ -963,13 +964,20 @@ export async function superCommand(opts: {
   const warmup = opts.warmup ? Number.parseInt(opts.warmup, 10) : 400;
   const { algorithmSuperRules } = await import("../baloto/algorithms.ts");
   const { hmmSuperRule } = await import("../baloto/regime.ts");
-  const rules = [...standardSuperRules(priorStrength, model.super), ...algorithmSuperRules(), hmmSuperRule()];
+  const { SuperChoiceCache, metaSuperRules } = await import("../baloto/meta.ts");
+  // The meta-rules (follow the leader, Bayesian average, contrarian, recency
+  // ensemble) read the base rules' nested walk-forward record; the shared cache
+  // makes each base choice once for both the base entries and the meta entries.
+  const baseRules = [...standardSuperRules(priorStrength, model.super), ...algorithmSuperRules(), hmmSuperRule()];
+  const cache = new SuperChoiceCache(baseRules);
+  const rules = [...cache.cached(), ...metaSuperRules(baseRules, { cache })];
   const scores = scoreSuperRules(draws, rules, tickets, warmup);
   const base = tickets / SUPER_POOL;
   console.log(
     c.dim(
       `  Walk-forward over ${scores[0]?.draws.toLocaleString("es-CO") ?? 0} draws. Any ${tickets} distinct balls hit at exactly ` +
-        `${pct(base)};\n  a rule only means something if it clears that by more than the field allows.`,
+        `${pct(base)};\n  a rule only means something if it clears that by more than the field allows: ` +
+        `|z| > ${bonferroniZ(rules.length).toFixed(2)} (Bonferroni over ${rules.length} rules).`,
     ),
   );
   console.log("");
