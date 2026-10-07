@@ -255,8 +255,6 @@ baloto
   .option("--prior <number>", "Dirichlet strength: higher assumes a fairer machine", "1")
   .option("--tiebreak <rule>", "Order among equally likely balls: posterior (default) or crowd", "posterior")
   .option("--warmup <number>", "Draws reserved before the rule tournament scores", "400")
-  .option("--typical", "Only main numbers shaped like a plausible real result")
-  .option("--coverage <fraction>", "How strictly 'typical' is read: 0.5 = the interquartile range of real draws, 0.8 = looser", "0.8")
   .option("--seed <number>", "Seed, for reproducible tickets")
   .option("--record", "Write these tickets to the ledger against the next draw, to be scored later")
   .option("--revancha", "Play the same tickets in the night's Revancha draw too: 1 − (1 − N/16)² instead of N/16")

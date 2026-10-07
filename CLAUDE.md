@@ -55,14 +55,18 @@ Rules that follow from that objective, all of them measured:
    objective, and the report must say in the same breath that the gap is
    inside noise. `--tiebreak crowd` (least-played balls) is opt-in only,
    because it is a payout criterion — it never becomes the default.
-5. **The five main numbers are free, and disjoint across tickets.** The
-   Súper Balota objective does not constrain them. They are filled from
-   `pick` with `maxOverlap: 0`: two tickets can only both reach three matches
-   if they share numbers, so sharing none makes those events exclusive and
-   "win anything" reaches its exact maximum (20.58 % with 3 tickets, against
-   20.49 % at overlap 2 and 19.36 % for three copies —
-   `winAnythingProbability`). That is a hit criterion, not a payout one. The
-   report says the main numbers are free.
+5. **The five main numbers are free, and chosen by structure only.** The
+   Súper Balota objective does not constrain them and every quintet is
+   exactly as likely as every other. They are filled by `optimiseCoverage`
+   (`coverage.ts`): disjoint tickets up to eight — two tickets can only both
+   reach three matches if they share numbers, so sharing none makes those
+   events exclusive and "win anything" reaches its exact maximum (20.58 %
+   with 3 tickets, against 20.49 % at overlap 2 and 19.36 % for three copies)
+   — minimal-overlap designs beyond, seeded random within that. **No
+   popularity, "typical shape" or payout criterion touches them.** An earlier
+   version filled them from `pick` (least-played combinations); the owner
+   ruled that out on 2026-10-07 — reducing co-winners is not the objective.
+   The report says the main numbers are free.
 6. **Revancha is coverage, the same kind as rule 2.** It is a complete second
    draw the same night (5 of 43 + 1 of 16, independent: `regime` p = 0.25) in
    which the ticket's numbers play again for $3.000 on top of $6.000. N
@@ -77,7 +81,7 @@ Rules that follow from that objective, all of them measured:
    (`docs/ESTRATEGIA.md` rule 2 is the payout view, and stays separate).
 
 When asked for "combinaciones para hoy", run
-`bun src/index.ts baloto super -n 3 --typical --seed <n> --record` and report
+`bun src/index.ts baloto super -n 3 --seed <n> --record` and report
 the coverage probability (N/16), P(win anything) from the budget curve, the
 balls, and the honest caveat in rule 4. If the owner is spending a fixed
 budget, say what the same pesos buy with Revancha (rule 6) and add

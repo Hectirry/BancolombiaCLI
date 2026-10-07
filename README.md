@@ -220,7 +220,7 @@ bancolombia baloto bias                     # how do players choose numbers?
 bancolombia baloto ev "3,7,12,17,23+7" -j 52800000000
 bancolombia baloto realized                 # selection rule backtested in actually-paid pesos
 bancolombia baloto pick -n 5                # combinations the crowd avoids
-bancolombia baloto super -n 3 --typical     # maximise P(hit the Súper Balota), and nothing else
+bancolombia baloto super -n 3               # maximise P(hit the Súper Balota), and nothing else
 bancolombia baloto algorithms               # Markov, affinity, k-NN, delta, logistic, periodogram — walk-forward
 bancolombia baloto regime                   # hidden-Markov regimes vs i.i.d. by BIC; Baloto × Revancha independence
 bancolombia baloto super -n 2 --revancha    # the same tickets in both of the night's draws: 1 − (1 − N/16)²
@@ -345,8 +345,10 @@ posterior mean first — with the report saying plainly that the gap is noise.
 hit rate is statistically identical (14.8 % vs 19.4 %, both within 2σ of
 18.75 %) while the +Súper tiers pay 1.53× more per winner on 19 % fewer
 co-winners. That is a payout criterion, which is why it is opt-in. The five
-main numbers are left to `pick`, because the Súper-Balota objective does not
-constrain them — with one exact rule: the tickets share no main number. Two
+main numbers are chosen by structure alone (`optimiseCoverage`), because the
+Súper-Balota objective does not constrain them and every quintet is equally
+likely — no popularity or shape criterion, with one exact rule: the tickets
+share no main number. Two
 tickets can only both reach three matches if they share numbers, so disjoint
 tickets make those events exclusive and "win anything" hits its ceiling:
 20.58 % with three tickets, against 20.49 % at overlap 2 and 19.36 % for three

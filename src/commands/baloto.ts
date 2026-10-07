@@ -931,8 +931,6 @@ export async function superCommand(opts: {
   prior?: string;
   tiebreak?: string;
   warmup?: string;
-  typical?: boolean;
-  coverage?: string;
   seed?: string;
   record?: boolean;
   revancha?: boolean;
@@ -1051,57 +1049,37 @@ export async function superCommand(opts: {
   console.log(c.dim(`  Balls ${plan.balls.join(", ")}, ${order}.`));
   console.log("");
 
-  // Disjoint main numbers are the exact optimum for "win anything" with N
-  // tickets: two tickets can only both reach three matches if they share
-  // numbers, so sharing none makes the events exclusive and their
-  // probabilities add. Worth 20.58 % against 20.49 % at overlap 2 — small,
-  // free, and a hit criterion rather than a payout one.
-  const { pickReport } = await import("../baloto/pick.ts");
-  const report = pickReport(model, {
-    count: tickets,
-    pool: 2000,
-    maxOverlap: 0,
-    typical: opts.typical === true,
-    typicalCoverage: opts.coverage ? Number(opts.coverage) : 0.8,
-    seed: opts.seed ? Number.parseInt(opts.seed, 10) : undefined,
-  });
+  // The five main numbers are free under the objective and are filled by
+  // STRUCTURE ONLY: disjoint tickets up to eight (the exact optimum for "win
+  // anything" — two tickets can only both reach three matches if they share
+  // numbers), minimal-overlap designs beyond, seeded random within that.
+  // No popularity, shape or payout criterion touches them: the owner asked
+  // for hits, and every quintet is exactly as likely as every other.
+  const { optimiseCoverage, overlapProfile, winAnythingExact } = await import("../baloto/coverage.ts");
+  const seed = opts.seed ? Number.parseInt(opts.seed, 10) : 1;
+  const structure = optimiseCoverage(tickets, seed);
+  const handed = structure.tickets.map((t, i) => ({ main: t.main, super: plan.balls[i] ?? t.super }));
   // The crowd column is a payout figure; it only appears when the caller
   // chose the crowd tiebreak, so the default report stays about hitting.
   const showCrowd = plan.rule === "least-played";
-  const rows = report.tickets.map((t, i) => {
-    const ball = plan.balls[i] ?? t.ticket.super;
-    const row = [
-      t.ticket.main.map((n) => String(n).padStart(2, "0")).join(" "),
-      String(ball).padStart(2, "0"),
-    ];
-    if (showCrowd) row.push(`${(model.super[ball - 1]! * SUPER_POOL).toFixed(2)}×`);
+  const rows = handed.map((t) => {
+    const row = [t.main.map((n) => String(n).padStart(2, "0")).join(" "), String(t.super).padStart(2, "0")];
+    if (showCrowd) row.push(`${(model.super[t.super - 1]! * SUPER_POOL).toFixed(2)}×`);
     return row;
   });
   console.log(
     table(showCrowd ? ["MAIN NUMBERS", "SÚPER", "CROWD ON THAT SÚPER"] : ["MAIN NUMBERS", "SÚPER"], rows),
   );
   console.log("");
-  // P(win anything) for exactly these tickets, by exact enumeration of the
-  // 962 598 main draws (coverage.ts). Disjoint tickets sit on the union bound
-  // and are the proven optimum; beyond eight tickets no arrangement can be
-  // disjoint, and the best minimal-overlap design found says how far the
-  // recommendation is from it.
-  const { optimiseCoverage, overlapProfile, winAnythingExact } = await import("../baloto/coverage.ts");
-  const handed = report.tickets.map((t, i) => ({ main: t.ticket.main, super: plan.balls[i] ?? t.ticket.super }));
   const exactWin = winAnythingExact(handed);
   const overlap = overlapProfile(handed.map((t) => t.main));
-  const seed = opts.seed ? Number.parseInt(opts.seed, 10) : 1;
-  const bestPlan = overlap.maxOverlap === 0 ? null : optimiseCoverage(tickets, seed);
   console.log(
     c.dim(
-      "  The five main numbers are free: the objective above does not constrain them,\n" +
-        "  so they are taken from the least-played combinations" +
+      "  The five main numbers are free: every quintet is exactly as likely as every other, so they are\n" +
+        "  chosen for structure alone — no popularity, shape or payout criterion" +
         (overlap.maxOverlap === 0
-          ? `, sharing no number across\n  tickets — the exact optimum for winning anything with ${tickets} tickets: ${pct(exactWin)}.`
-          : `, sharing at most ${overlap.maxOverlap} number(s)\n  between any two tickets — P(win anything) for exactly these tickets: ${pct(exactWin)}` +
-            (bestPlan && bestPlan.winAnythingProbability > exactWin + 1e-12
-              ? ` (the best\n  arrangement found for ${tickets} tickets reaches ${pct(bestPlan.winAnythingProbability)}).`
-              : ".")) +
+          ? `: no number is shared across\n  tickets, the exact optimum for winning anything with ${tickets} tickets: ${pct(exactWin)}.`
+          : `: at most ${overlap.maxOverlap} number(s) shared\n  between any two tickets (${structure.status}); P(win anything) for exactly these tickets: ${pct(exactWin)}.`) +
         "\n  A Súper Balota hit pays something at any number of main matches, so every hit is a winning ticket.",
     ),
   );
@@ -1178,14 +1156,14 @@ export async function superCommand(opts: {
     const latest = draws[draws.length - 1]?.date;
     if (!latest) return;
     const target = nextDrawDate(latest);
-    const night = nightCoverage(report.tickets.length, revancha);
+    const night = nightCoverage(handed.length, revancha);
     const ledger = recordRecommendation(await loadLedger(), {
       recordedAt: new Date().toISOString(),
       targetDate: target,
       game,
       model: `super/${plan.rule}`,
-      tickets: report.tickets.map((t, i) => ({ main: t.ticket.main, super: plan.balls[i] ?? t.ticket.super })),
-      note: `seed ${opts.seed ?? "none"}, typical ${opts.typical === true}`,
+      tickets: handed,
+      note: `seed ${opts.seed ?? "none"}, mains by structure only (${structure.status})`,
       revancha,
       cost: night.cost,
     });
