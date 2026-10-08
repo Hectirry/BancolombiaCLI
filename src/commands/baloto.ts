@@ -1189,6 +1189,7 @@ export async function scoreCommand(opts: { game?: string }): Promise<void> {
   // Both games: a night that played Revancha is scored against both draws.
   const draws = [...drawsFor(dataset, "baloto"), ...drawsFor(dataset, "revancha")];
   const { detectableDeparture, loadLedger, nightsToDistinguish, scoreLedger } = await import("../baloto/ledger.ts");
+  const { winAnythingProbability } = await import("../baloto/superball.ts");
   const ledger = await loadLedger();
   const score = scoreLedger({ entries: ledger.entries.filter((e) => e.game === game) }, draws);
 
@@ -1231,7 +1232,12 @@ export async function scoreCommand(opts: { game?: string }): Promise<void> {
     `  Súper Balota hits: ${score.superHits} of ${nights} nights; expected ${score.superExpected.toFixed(2)}` +
       (score.superPValue !== null ? `; two-sided exact p = ${score.superPValue.toFixed(3)}` : ""),
   );
-  console.log(`  Won anything: ${score.wins} of ${nights} nights.`);
+  console.log(
+    `  Won anything: ${score.wins} of ${nights} nights` +
+      (score.scored.length > 0
+        ? `; expected ${score.scored.reduce((acc, s) => acc + winAnythingProbability(s.entry.tickets.length), 0).toFixed(2)}.`
+        : "."),
+  );
   // The stake side of the record: pesos per hit, against what the model
   // implies. Not what a hit pays — how much it costs to be there when it comes.
   console.log(
@@ -1244,7 +1250,10 @@ export async function scoreCommand(opts: { game?: string }): Promise<void> {
     const { current, longest, pCurrent } = score.streak;
     console.log(
       current > 0
-        ? `  Drought: ${current} night(s) without a hit (longest ${longest}); a run this long or longer happens ${pct(pCurrent)} of the time under the model.`
+        // pCurrent is the product of the trailing nights' miss probabilities —
+        // exactly P(these particular nights all miss), not P(some run this long
+        // appears somewhere in the ledger), which is larger. Say the former.
+        ? `  Drought: ${current} night(s) without a hit (longest ${longest}); under the model, ${current} given night(s) all missing has probability ${pct(pCurrent)}.`
         : `  The latest night hit. Longest drought so far: ${longest} night(s).`,
     );
   }
