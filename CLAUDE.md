@@ -227,6 +227,14 @@ nights). Record every recommendation handed to the owner. Never score from
 memory, and never backfill an entry that was not stated before its draw. The
 ledger never changes a model; the tournament does.
 
+The ledger lives outside the repo, and a container reset wipes it (this
+happened on 2026-10-19; eight entries were restored from a score table and
+carry a note saying their original `recordedAt` was lost). So after every
+`--record`, copy it to `data/baloto-ledger.json` and commit; on a fresh
+container restore it with
+`mkdir -p ~/.bancolombia && cp data/baloto-ledger.json ~/.bancolombia/`.
+The committed copy is a backup, never a place to edit entries.
+
 When the owner asks "¿por qué no acertaste?", run `baloto postmortem`
 (`src/baloto/postmortem.ts`, default `--draws 12`) instead of reasoning from
 the last few results. It separates the model's own forecast (13/16 a night;
