@@ -162,21 +162,75 @@ function uuid(){ return 'v'+Date.now().toString(36)+Math.random().toString(36).s
 function fmtFecha(iso){ if (!/^\d{4}-\d{2}-\d{2}$/.test(iso||'')) return iso||''; var x = iso.split('-'); return x[2]+'/'+x[1]+'/'+x[0]; }
 function A(m){ if (!S.ans[m]) S.ans[m] = {}; return S.ans[m]; }
 
-/* ---------- Llamadas al servidor (Apps Script) o simulación local en la vista previa ---------- */
+/* ---------- Llamadas al servidor ----------
+   1) Dentro de Apps Script: google.script.run → hoja Registros.
+   2) Publicada como página de Claude: base de datos compartida (colección "visitas").
+   3) Sin ninguna de las dos: simulación local en este navegador. */
+var DBP = null;
+function getDb(){
+  if (!DBP) DBP = (window.claude && typeof window.claude.use === 'function') ? window.claude.use('db').catch(function(){ return null; }) : Promise.resolve(null);
+  return DBP;
+}
+var MODE = MOCK ? 'mock' : 'gas';
+if (MOCK) getDb().then(function(db){ if (db){ MODE = 'db'; render(); } });
+
 function call(fn){
   var args = Array.prototype.slice.call(arguments,1);
-  if (MOCK) return Promise.resolve().then(function(){ return mock[fn].apply(null, args); });
-  return new Promise(function(res, rej){
+  if (!MOCK) return new Promise(function(res, rej){
     var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej);
     r[fn].apply(r, args);
   });
+  return getDb().then(function(db){ return (db ? remote(db) : mock)[fn].apply(null, args); });
 }
 function callRetry(fn, args, tries){
   tries = tries || 3;
   return call.apply(null,[fn].concat(args)).catch(function(e){
-    if (tries <= 1 || /inválid|Debes|Indica/.test(e && e.message)) throw e;
+    if (tries <= 1 || /inválid|Debes|Indica|permiso|lleno/.test(e && e.message)) throw e;
     return new Promise(function(r){ setTimeout(r, 1500); }).then(function(){ return callRetry(fn, args, tries-1); });
   });
+}
+
+/* Backend de la base de datos compartida: un documento por visita, id = idEnvio (los reintentos no duplican). */
+function pdvKey(s){ return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); }
+function dbErr(e){
+  var c = e && e.code;
+  if (c === 'invalid_argument') return new Error('No tienes permiso para guardar en esta encuesta. Pide al dueño acceso como Colaborador.');
+  if (c === 'quota_exceeded') return new Error('La base de datos de la encuesta está llena. Avísale al dueño.');
+  return new Error((e && e.message) || 'sin conexión');
+}
+function remote(db){
+  var col = db.collection('visitas');
+  return {
+    apiConfig: function(){
+      return col.limit(1000).get().then(function(snap){
+        var seen = {}, pdvs = CFG.pdvs.slice();
+        pdvs.forEach(function(p){ seen[pdvKey(p)] = 1; });
+        snap.docs.forEach(function(d){ var v = d.data() || {}; var k = pdvKey(v.pdv); if (v.pdv && !seen[k]){ seen[k] = 1; pdvs.push(String(v.pdv)); } });
+        return { marcas: CFG.marcas, ofertas: CFG.ofertas, pdvs: pdvs.sort(function(a,b){ return a.localeCompare(b,'es'); }) };
+      }).catch(function(e){ throw dbErr(e); });
+    },
+    apiSubmit: function(p){
+      var body = { idEnvio:p.idEnvio, vendedor:p.vendedor, pdv:p.pdv, pdvKey:pdvKey(p.pdv), fecha:p.fecha, observaciones:p.observaciones,
+        marcas: p.marcas.map(function(m){ return { marca:m.marca, unidades:Number(m.unidades)||0, vendioOferta:!!m.vendioOferta, oferta:m.vendioOferta ? m.oferta : '', nota:m.nota||'' }; }),
+        unidadesTotal: p.marcas.reduce(function(s,m){ return s + (Number(m.unidades)||0); }, 0),
+        creado: new Date().toISOString() };
+      return col.doc(p.idEnvio).set(body).then(function(){ return remote(db).apiResumenPDV(p.pdv); }, function(e){ throw dbErr(e); });
+    },
+    apiResumenPDV: function(pdv){
+      return col.where('pdvKey','==',pdvKey(pdv)).limit(1000).get().then(function(snap){
+        var g = {};
+        snap.docs.forEach(function(d){
+          (d.data().marcas || []).forEach(function(m){
+            if (!(m.unidades > 0 || m.vendioOferta)) return;
+            var k = m.marca; if (!g[k]) g[k] = { marca:k, visitas:0, unidades:0, conOferta:0, ofertas:{} };
+            g[k].visitas++; g[k].unidades += Number(m.unidades)||0;
+            if (m.vendioOferta){ var o = m.oferta || '(sin especificar)'; g[k].conOferta++; g[k].ofertas[o] = (g[k].ofertas[o]||0)+1; }
+          });
+        });
+        return { pdv: pdv, visitas: snap.size, marcas: CFG.marcas.map(function(m){ return g[m] || { marca:m, visitas:0, unidades:0, conOferta:0, ofertas:{} }; }) };
+      }).catch(function(e){ throw dbErr(e); });
+    }
+  };
 }
 
 /* Simulación para la vista previa: guarda en este navegador y calcula el acumulado igual que el servidor. */
@@ -215,7 +269,7 @@ var mock = {
 /* ---------- Render ---------- */
 function topbar(){
   document.getElementById('topbar').hidden = (S.step==='welcome');
-  var h = '<div class="brand">'+esc(CFG.titulo)+(MOCK?' <span class="chip">VISTA PREVIA</span>':'')+'<small>'+esc(S.vendedor || CFG.equipo)+'</small></div>';
+  var h = '<div class="brand">'+esc(CFG.titulo)+(MODE==='mock'?' <span class="chip">VISTA PREVIA</span>':'')+'<small>'+esc(S.vendedor || CFG.equipo)+'</small></div>';
   if (S.step==='marca' || S.step==='review') {
     h += '<div class="bar">'+CFG.marcas.map(function(m,i){ var c = S.step==='review' || i < S.i ? 'done' : (i===S.i ? 'on' : ''); return '<span class="'+c+'"></span>'; }).join('')+'</div>';
   }
@@ -251,7 +305,7 @@ function blk(keys, inner){ var bad = keys.some(function(k){ return errs[k]; }); 
 function vWelcome(){
   app('<div class="hero"><div class="eyebrow">Registro de visita</div><h1>'+esc(CFG.titulo)+'</h1>'+
     '<p>Por cada punto de venta vas a registrar, marca por marca, cuántas unidades vendiste, si le vendiste la oferta y cuál fue.</p></div>'+
-    (MOCK ? '<div class="note"><b>Vista previa.</b> Aquí las respuestas se guardan solo en este navegador. En la versión instalada en Google Sheets van a la hoja Registros.</div>' : '')+
+    (MODE==='mock' ? '<div class="note"><b>Vista previa.</b> Aquí las respuestas se guardan solo en este navegador. En la versión instalada en Google Sheets van a la hoja Registros.</div>' : '')+
     '<div class="block"><p><b>Marcas que se registran</b></p><p>'+CFG.marcas.map(esc).join(' · ')+'</p>'+
     '<p style="margin:0">Tu avance se guarda en este celular. Si se cierra la página, ábrela de nuevo con el mismo link y retomas donde ibas.</p></div>');
   nav([{label:'Empezar', act:'toVendedor'}]);
