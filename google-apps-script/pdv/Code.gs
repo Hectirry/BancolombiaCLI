@@ -36,7 +36,8 @@ var CONFIG = {
     'Oferta',
     'Observaciones',
     'Registrado por',
-    'Marca de tiempo'
+    'Marca de tiempo',
+    'ID envío'
   ],
 
   // Índices de columna (1 = A) en la hoja Registros.
@@ -49,7 +50,8 @@ var CONFIG = {
     OFERTA: 6,
     OBS: 7,
     USUARIO: 8,
-    TIMESTAMP: 9
+    TIMESTAMP: 9,
+    ID: 10
   },
 
   SIN_OFERTA: '—'
@@ -212,12 +214,13 @@ function listarPDVs() {
 
 /**
  * Guarda una visita completa (varias marcas) como filas en Registros.
+ * La usan la barra lateral (guardarVisita) y la web app (apiSubmit).
  *
- * @param {{fecha: string, pdv: string, observaciones: string,
- *          marcas: {marca: string, unidades: number|string, vendioOferta: boolean, oferta: string}[]}} datos
- * @return {string} mensaje para mostrar al usuario
+ * @param {{fecha: string, pdv: string, observaciones: string, vendedor: string, idEnvio: string,
+ *          marcas: {marca: string, unidades: number|string, vendioOferta: boolean, oferta: string, nota: string}[]}} datos
+ * @return {{pdv: string, filas: number, conOferta: number, duplicado: boolean}}
  */
-function guardarVisita(datos) {
+function registrarVisita(datos) {
   if (!datos || !datos.pdv || !String(datos.pdv).trim()) {
     throw new Error('Debes indicar el nombre del PDV.');
   }
@@ -225,8 +228,19 @@ function guardarVisita(datos) {
   var fecha = datos.fecha ? new Date(datos.fecha + 'T00:00:00') : new Date();
   if (isNaN(fecha.getTime())) throw new Error('La fecha no es válida.');
 
+  var registros = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.HOJA_REGISTROS);
+  if (!registros) throw new Error('No existe la hoja Registros. Ejecuta PDV → Configurar hojas.');
+
+  // Reintentos desde el celular: si este envío ya está guardado, no se duplica.
+  var idEnvio = String(datos.idEnvio || '').trim();
+  if (idEnvio && registros.getLastRow() > 1) {
+    var ids = registros.getRange(2, CONFIG.COL.ID, registros.getLastRow() - 1, 1).getValues();
+    var yaExiste = ids.some(function (f) { return String(f[0]) === idEnvio; });
+    if (yaExiste) return { pdv: pdv, filas: 0, conOferta: 0, duplicado: true };
+  }
+
   var filas = [];
-  var usuario = Session.getActiveUser().getEmail() || '';
+  var usuario = String(datos.vendedor || '').trim() || Session.getActiveUser().getEmail() || '';
   var ahora = new Date();
   var observaciones = String(datos.observaciones || '').trim();
 
@@ -244,14 +258,14 @@ function guardarVisita(datos) {
     // Solo se guardan marcas con algo que reportar.
     if (unidades === 0 && !vendio) return;
 
-    filas.push([fecha, pdv, m.marca, unidades, vendio ? 'Sí' : 'No', oferta, observaciones, usuario, ahora]);
+    var obs = [String(m.nota || '').trim(), observaciones].filter(Boolean).join(' | ');
+    filas.push([fecha, pdv, m.marca, unidades, vendio ? 'Sí' : 'No', oferta, obs, usuario, ahora, idEnvio]);
   });
 
   if (!filas.length) {
     throw new Error('No hay nada que guardar: todas las marcas tienen 0 unidades y sin oferta.');
   }
 
-  var registros = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.HOJA_REGISTROS);
   var inicio = registros.getLastRow() + 1;
   registros.getRange(inicio, 1, filas.length, filas[0].length).setValues(filas);
   registros.getRange(inicio, CONFIG.COL.FECHA, filas.length, 1).setNumberFormat('yyyy-mm-dd');
@@ -260,7 +274,14 @@ function guardarVisita(datos) {
   generarResumen();
 
   var conOferta = filas.filter(function (f) { return f[CONFIG.COL.VENDIO - 1] === 'Sí'; }).length;
-  return 'Guardado: ' + filas.length + ' marca(s) para "' + pdv + '" (' + conOferta + ' con oferta).';
+  return { pdv: pdv, filas: filas.length, conOferta: conOferta, duplicado: false };
+}
+
+/** Versión para la barra lateral: devuelve un mensaje de texto. */
+function guardarVisita(datos) {
+  var r = registrarVisita(datos);
+  if (r.duplicado) return 'Esta visita ya estaba guardada.';
+  return 'Guardado: ' + r.filas + ' marca(s) para "' + r.pdv + '" (' + r.conOferta + ' con oferta).';
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +328,7 @@ function onEdit(e) {
 
 /**
  * Devuelve los registros como objetos.
- * @return {{fecha: Date, pdv: string, marca: string, unidades: number, vendio: boolean, oferta: string, obs: string}[]}
+ * @return {{fecha: Date, pdv: string, marca: string, unidades: number, vendio: boolean, oferta: string, obs: string, id: string}[]}
  */
 function leerRegistros() {
   var registros = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.HOJA_REGISTROS);
@@ -325,7 +346,8 @@ function leerRegistros() {
         unidades: Number(f[C.UNIDADES - 1]) || 0,
         vendio: String(f[C.VENDIO - 1]).trim().toLowerCase() === 'sí' || String(f[C.VENDIO - 1]).trim().toLowerCase() === 'si',
         oferta: String(f[C.OFERTA - 1]).trim(),
-        obs: String(f[C.OBS - 1]).trim()
+        obs: String(f[C.OBS - 1]).trim(),
+        id: String(f[C.ID - 1] || '').trim()
       };
     });
 }

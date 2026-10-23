@@ -1,11 +1,16 @@
 # Registro de visitas a PDV (Google Apps Script)
 
-Script para Google Sheets que registra, por cada **PDV (punto de venta)** y por cada
-marca (**Savital, Dove, Sedal, Nutribella, Alma de Romero**):
+Encuesta interactiva para el celular (web app de Apps Script) y hoja de Google Sheets que
+registran, por cada **PDV (punto de venta)** y por cada marca (**Savital, Dove, Sedal,
+Nutribella, Alma de Romero**):
 
 - cuántas **unidades**,
 - si **le vendió la oferta o no**,
 - **cuál oferta** fue.
+
+La encuesta (`Index.html` + `WebApp.gs`) funciona paso a paso: quién registra → PDV y fecha →
+una pantalla por marca (unidades, ¿vendió oferta?, ¿cuál?) → revisar → enviar → acumulado del
+PDV. El avance se guarda en el celular y, al enviar, las respuestas caen en la hoja `Registros`.
 
 > Esta carpeta es independiente del CLI de Bancolombia; solo vive aquí para tener el
 > código versionado. No se instala con `bun`, se pega en Google Sheets.
@@ -15,20 +20,38 @@ marca (**Savital, Dove, Sedal, Nutribella, Alma de Romero**):
 1. Crea una hoja de cálculo nueva en Google Sheets.
 2. Menú **Extensiones → Apps Script**.
 3. Borra el contenido de `Código.gs` y pega el de [`Code.gs`](Code.gs).
-4. Botón **+ → HTML**, nómbralo exactamente `Sidebar` y pega el contenido de
-   [`Sidebar.html`](Sidebar.html).
-5. (Opcional) En **Configuración del proyecto** marca "Mostrar el archivo de manifiesto
+4. Botón **+ → Secuencia de comandos**, nómbralo `WebApp` y pega [`WebApp.gs`](WebApp.gs).
+5. Botón **+ → HTML**, nómbralo exactamente `Index` y pega [`Index.html`](Index.html).
+6. Botón **+ → HTML**, nómbralo exactamente `Sidebar` y pega [`Sidebar.html`](Sidebar.html)
+   (opcional: es el formulario dentro de la hoja).
+7. (Opcional) En **Configuración del proyecto** marca "Mostrar el archivo de manifiesto
    appsscript.json" y reemplázalo por [`appsscript.json`](appsscript.json) para fijar la
    zona horaria de Bogotá.
-6. Guarda (Ctrl+S), vuelve a la hoja y recárgala. Aparece el menú **PDV**.
-7. **PDV → Configurar hojas (primera vez)**. Acepta los permisos que pide Google.
+8. Guarda (Ctrl+S), vuelve a la hoja y recárgala. Aparece el menú **PDV**.
+9. **PDV → Configurar hojas (primera vez)**. Acepta los permisos que pide Google.
+
+## Publicar la encuesta (link para el celular)
+
+1. En el editor de Apps Script: **Implementar → Nueva implementación**.
+2. Tipo: **Aplicación web**. Descripción: "Encuesta PDV".
+3. **Ejecutar como:** Yo (tu cuenta). **Quién tiene acceso:** Cualquier usuario
+   (o "Cualquier usuario con cuenta de Google" si quieres exigir inicio de sesión).
+4. **Implementar** y acepta los permisos. Copia la URL que termina en `/exec`: ese es el
+   link de la encuesta para compartir con los vendedores.
+
+Cada vez que cambies `Index.html` o `WebApp.gs`, ve a **Implementar → Administrar
+implementaciones → editar (lápiz) → Versión: Nueva → Implementar** para que el link se
+actualice. Las marcas y ofertas se leen de la hoja `Config` en cada carga, sin redeploy.
+
+Para probar la encuesta sin instalarla hay una vista previa publicada (ver el PR). En esa
+vista previa las respuestas se guardan solo en el navegador.
 
 Se crean tres hojas:
 
 | Hoja        | Para qué sirve |
 |-------------|----------------|
 | `Config`    | Columna A: marcas. Columna B: ofertas. Edítalas a mano y los desplegables se actualizan solos. |
-| `Registros` | Una fila por PDV + marca + visita: Fecha, PDV, Marca, Unidades, Vendió oferta, Oferta, Observaciones, Registrado por, Marca de tiempo. |
+| `Registros` | Una fila por PDV + marca + visita: Fecha, PDV, Marca, Unidades, Vendió oferta, Oferta, Observaciones, Registrado por, Marca de tiempo, ID envío (evita duplicados si el celular reintenta). |
 | `Resumen`   | Una fila por PDV y marca: visitas, unidades totales, veces que vendió oferta, % de visitas con oferta, qué ofertas vendió (y cuántas veces), última visita y su resultado. |
 
 ## Uso diario
