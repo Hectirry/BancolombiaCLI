@@ -29,7 +29,7 @@ var CONFIG = {
 
   ENCABEZADOS: [
     'Fecha',
-    'PDV',
+    'Código PDV',
     'Marca',
     'Unidades',
     'Vendió oferta',

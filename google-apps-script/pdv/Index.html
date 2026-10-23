@@ -152,7 +152,7 @@ var S = load() || fresh();
 var errs = {};
 var cache = { q: '' };
 
-function fresh(){ return { step:'welcome', vendedor:(S && S.vendedor) || '', pdv:'', fecha:today(), i:0, ans:{}, obs:'', id:null, result:null }; }
+function fresh(){ return { step:'pdv', vendedor:'', pdv:'', fecha:today(), i:0, ans:{}, obs:'', id:null, result:null }; }
 function today(){ var d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function load(){ try{ var v = localStorage.getItem(KEY); return v ? JSON.parse(v) : null; }catch(e){ return null; } }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
@@ -268,12 +268,11 @@ var mock = {
 
 /* ---------- Render ---------- */
 function topbar(){
-  document.getElementById('topbar').hidden = (S.step==='welcome');
-  var h = '<div class="brand">'+esc(CFG.titulo)+(MODE==='mock'?' <span class="chip">VISTA PREVIA</span>':'')+'<small>'+esc(S.vendedor || CFG.equipo)+'</small></div>';
+  var h = '<div class="brand">'+esc(CFG.titulo)+(MODE==='mock'?' <span class="chip">VISTA PREVIA</span>':'')+'<small>'+esc(fmtFecha(S.fecha))+'</small></div>';
   if (S.step==='marca' || S.step==='review') {
     h += '<div class="bar">'+CFG.marcas.map(function(m,i){ var c = S.step==='review' || i < S.i ? 'done' : (i===S.i ? 'on' : ''); return '<span class="'+c+'"></span>'; }).join('')+'</div>';
   }
-  if (S.step==='marca') h += '<div class="catline"><span>'+esc(S.pdv)+'</span><span>'+(S.i+1)+' de '+CFG.marcas.length+'</span></div>';
+  if (S.step==='marca') h += '<div class="catline"><span>PDV '+esc(S.pdv)+'</span><span>'+(S.i+1)+' de '+CFG.marcas.length+'</span></div>';
   document.getElementById('top').innerHTML = h;
 }
 function nav(buttons){
@@ -286,7 +285,7 @@ function nav(buttons){
 }
 function render(){
   topbar();
-  var f = { welcome:vWelcome, vendedor:vVendedor, pdv:vPdv, marca:vMarca, review:vReview, result:vResult }[S.step] || vWelcome;
+  var f = { pdv:vPdv, marca:vMarca, review:vReview, result:vResult }[S.step] || vPdv;
   f();
 }
 function go(step){ S.step = step; errs = {}; save(); render(); window.scrollTo(0,0); }
@@ -302,44 +301,18 @@ var YN = [{v:'Sí',c:'yes'},{v:'No',c:'no'}];
 function msg(k){ return errs[k] ? '<p class="msg">'+esc(errs[k])+'</p>' : ''; }
 function blk(keys, inner){ var bad = keys.some(function(k){ return errs[k]; }); return '<div class="block'+(bad?' err':'')+'">'+inner+'</div>'; }
 
-function vWelcome(){
-  app('<div class="hero"><div class="eyebrow">Registro de visita</div><h1>'+esc(CFG.titulo)+'</h1>'+
-    '<p>Por cada punto de venta vas a registrar, marca por marca, cuántas unidades vendiste, si le vendiste la oferta y cuál fue.</p></div>'+
-    (MODE==='mock' ? '<div class="note"><b>Vista previa.</b> Aquí las respuestas se guardan solo en este navegador. En la versión instalada en Google Sheets van a la hoja Registros.</div>' : '')+
-    '<div class="block"><p><b>Marcas que se registran</b></p><p>'+CFG.marcas.map(esc).join(' · ')+'</p>'+
-    '<p style="margin:0">Tu avance se guarda en este celular. Si se cierra la página, ábrela de nuevo con el mismo link y retomas donde ibas.</p></div>');
-  nav([{label:'Empezar', act:'toVendedor'}]);
-}
-
-function vVendedor(){
-  app('<h2>¿Quién registra?</h2><p class="sub">Tu nombre aparece en cada registro.</p>'+
-    blk(['_vend'], '<label class="lbl" for="vend">Nombre del vendedor</label><input class="field" id="vend" autocomplete="name" placeholder="Ej. Carlos Pérez" value="'+esc(S.vendedor)+'">'+msg('_vend')));
-  nav([{label:'Atrás', act:'toWelcome', ghost:true},{label:'Continuar', act:'vendNext'}]);
-  var el = document.getElementById('vend'); el.addEventListener('input', function(){ S.vendedor = el.value; save(); });
-}
-
 function vPdv(){
-  app('<h2>Punto de venta</h2><p class="sub">Escribe el nombre del PDV o elígelo de la lista.</p>'+
-    blk(['_pdv'], '<label class="lbl" for="pdvq">Nombre del PDV</label><input class="field" id="pdvq" autocomplete="off" placeholder="Ej. Tienda Doña Rosa" value="'+esc(S.pdv)+'">'+msg('_pdv')+'<ul class="list" id="pl" hidden></ul>')+
-    blk(['_fecha'], '<label class="lbl" for="fecha">Fecha de la visita</label><input class="field" id="fecha" type="date" value="'+esc(S.fecha)+'">'+msg('_fecha')));
-  nav([{label:'Atrás', act:'toVendedor', ghost:true},{label:'Continuar', act:'pdvNext'}]);
-  var q = document.getElementById('pdvq'), f = document.getElementById('fecha');
-  q.addEventListener('input', function(){ S.pdv = q.value; save(); listPdvs(); });
-  q.addEventListener('focus', listPdvs);
-  f.addEventListener('input', function(){ S.fecha = f.value; save(); });
-  if (!cache.pdvs){ callRetry('apiConfig', []).then(function(c){ cache.pdvs = c.pdvs || []; listPdvs(); }).catch(function(){ cache.pdvs = []; }); }
-}
-function listPdvs(){
-  var el = document.getElementById('pl'); if (!el || !cache.pdvs) return;
-  var q = (S.pdv||'').trim().toLowerCase();
-  var hits = cache.pdvs.filter(function(p){ return p.toLowerCase() !== q && (!q || p.toLowerCase().indexOf(q) > -1); }).slice(0,8);
-  el.hidden = !hits.length;
-  el.innerHTML = hits.map(function(p){ return '<li><button type="button" data-pick="'+esc(p)+'"><b>'+esc(p)+'</b><span>ya registrado</span></button></li>'; }).join('');
+  app('<h2>Código del PDV</h2><p class="sub">Escríbelo y empieza a registrar las marcas.</p>'+
+    blk(['_pdv'], '<label class="lbl" for="pdvq">Código</label><input class="field" id="pdvq" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ej. 104523" value="'+esc(S.pdv)+'">'+msg('_pdv')));
+  nav([{label:'Empezar', act:'pdvNext'}]);
+  var q = document.getElementById('pdvq');
+  q.addEventListener('input', function(){ S.pdv = q.value; save(); });
+  q.addEventListener('keydown', function(e){ if (e.key === 'Enter') ACT.pdvNext(); });
 }
 
 function vMarca(){
   var m = CFG.marcas[S.i], a = A(m);
-  var h = '<h2>'+esc(m)+'</h2><p class="sub">'+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p>';
+  var h = '<h2>'+esc(m)+'</h2><p class="sub">PDV '+esc(S.pdv)+'</p>';
   var inner = '<p class="q">¿Cuántas unidades vendiste de '+esc(m)+'?</p><p class="hint">Si no vendiste ninguna, deja 0.</p>'+
     '<div class="stepper"><button type="button" data-step="-1" aria-label="Menos">−</button>'+
     '<input class="field" id="unid" type="number" inputmode="numeric" min="0" step="1" value="'+esc(a.unidades == null ? 0 : a.unidades)+'">'+
@@ -354,7 +327,7 @@ function vMarca(){
   h += '<div class="block"><label class="lbl" for="nota">Comentario sobre '+esc(m)+' (opcional)</label><textarea class="field" id="nota" placeholder="Ej. Pidió más surtido de 400 ml">'+esc(a.nota||'')+'</textarea></div>';
   app(h);
   var last = S.i === CFG.marcas.length-1;
-  nav([{label: S.i===0 ? 'PDV' : 'Anterior', act:'prev', ghost:true},{label: last ? 'Revisar y enviar' : 'Siguiente', act:'next'}]);
+  nav([{label: S.i===0 ? 'Código' : 'Anterior', act:'prev', ghost:true},{label: last ? 'Revisar y enviar' : 'Siguiente', act:'next'}]);
   var u = document.getElementById('unid'); u.addEventListener('input', function(){ a.unidades = u.value; save(); });
   var o = document.getElementById('otra'); if (o) o.addEventListener('input', function(){ a.otra = o.value; save(); });
   var n = document.getElementById('nota'); n.addEventListener('input', function(){ a.nota = n.value; save(); });
@@ -372,7 +345,7 @@ function validateMarca(m){
 function ofertaDe(a){ return a.vendio === 'Sí' ? (a.oferta === 'Otra' ? (a.otra||'').trim() : a.oferta) : ''; }
 
 function vReview(){
-  var h = '<h2>Revisar y enviar</h2><p class="sub">'+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+' · '+esc(S.vendedor)+'</p>';
+  var h = '<h2>Revisar y enviar</h2><p class="sub">PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p>';
   var tot = 0, conOf = 0;
   CFG.marcas.forEach(function(m, i){
     var a = A(m), u = num(a.unidades)||0, of = ofertaDe(a); tot += u; if (of) conOf++;
@@ -381,7 +354,7 @@ function vReview(){
       (of ? '<span class="pill yes">Oferta: '+esc(of)+'</span>' : '<span class="pill no">Sin oferta</span>')+
       '<div><button class="link" data-goto="'+i+'">Editar</button></div></div></div>';
   });
-  h += '<div class="block"><label class="lbl" for="obs">Observaciones del PDV (opcional)</label><textarea class="field" id="obs" placeholder="Ej. El dueño pide visita el próximo martes">'+esc(S.obs||'')+'</textarea></div>';
+  h += '<div class="block"><label class="lbl" for="obs">Observaciones (opcional)</label><textarea class="field" id="obs" placeholder="Ej. El dueño pide visita el próximo martes">'+esc(S.obs||'')+'</textarea></div>';
   h += '<div class="block"><p style="margin:0"><b>'+tot+' unidades</b> en total y oferta vendida en <b>'+conOf+' de '+CFG.marcas.length+'</b> marcas. Después de enviar ya no podrás editar esta visita.</p></div><div id="sendmsg"></div>';
   app(h);
   nav([{label:'Anterior', act:'backToMarca', ghost:true},{label:'Enviar visita', act:'send'}]);
@@ -390,16 +363,17 @@ function vReview(){
 
 function buildPayload(){
   if (!S.id) { S.id = uuid(); save(); }
-  return { idEnvio:S.id, vendedor:S.vendedor.trim(), pdv:S.pdv.trim(), fecha:S.fecha, observaciones:(S.obs||'').trim(),
+  return { idEnvio:S.id, vendedor:'', pdv:S.pdv.trim(), fecha:S.fecha, observaciones:(S.obs||'').trim(),
     marcas: CFG.marcas.map(function(m){ var a = A(m); return { marca:m, unidades:num(a.unidades)||0, vendioOferta:a.vendio==='Sí', oferta:ofertaDe(a), nota:(a.nota||'').trim() }; }) };
 }
 
 function vResult(){
   var r = S.result, max = 1;
+  if (!r || !r.marcas){ go('pdv'); return; }
   r.marcas.forEach(function(x){ max = Math.max(max, x.unidades); });
   var unidHoy = CFG.marcas.reduce(function(s,m){ return s + (num(A(m).unidades)||0); }, 0);
   var h = '<div class="hero-score"><div class="eyebrow" style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.8">Visita guardada</div>'+
-    '<div class="big">'+unidHoy+'<small> unidades hoy</small></div><p>'+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p></div>';
+    '<div class="big">'+unidHoy+'<small> unidades hoy</small></div><p>PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p></div>';
   h += '<h2>Acumulado en este PDV</h2><p class="sub">'+r.visitas+' visita'+(r.visitas===1?'':'s')+' registrada'+(r.visitas===1?'':'s')+' en total.</p><div class="block"><ul class="shelf">';
   r.marcas.forEach(function(x){
     var ofs = Object.keys(x.ofertas).sort(function(a,b){ return x.ofertas[b]-x.ofertas[a]; }).map(function(k){ return esc(k)+' ×'+x.ofertas[k]; });
@@ -423,15 +397,10 @@ document.addEventListener('click', function(ev){
 });
 
 var ACT = {
-  toWelcome: function(){ go('welcome'); },
-  toVendedor: function(){ go('vendedor'); },
-  vendNext: function(){ if (!(S.vendedor||'').trim()){ errs = {_vend:'Escribe tu nombre.'}; render(); return; } go('pdv'); },
   pdvNext: function(){
-    errs = {};
-    if (!(S.pdv||'').trim()) errs._pdv = 'Escribe el nombre del punto de venta.';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(S.fecha||'')) errs._fecha = 'Elige la fecha de la visita.';
-    if (Object.keys(errs).length){ render(); return; }
-    S.i = 0; go('marca');
+    S.pdv = String(S.pdv||'').trim().toUpperCase();
+    if (!S.pdv){ errs = {_pdv:'Escribe el código del PDV.'}; render(); return; }
+    S.fecha = today(); S.i = 0; go('marca');
   },
   prev: function(){ if (S.i===0) go('pdv'); else { S.i--; go('marca'); } },
   next: function(){
@@ -449,7 +418,7 @@ var ACT = {
         document.getElementById('sendmsg').innerHTML = '<div class="note">No se pudo enviar: '+esc(e && e.message || 'sin conexión')+'. Tus respuestas siguen guardadas en este celular. Revisa tu conexión y vuelve a intentar.</div>';
       });
   },
-  another: function(){ var v = S.vendedor; S = fresh(); S.vendedor = v; S.step = 'pdv'; cache.pdvs = null; save(); render(); window.scrollTo(0,0); }
+  another: function(){ S = fresh(); save(); render(); window.scrollTo(0,0); }
 };
 
 render();
