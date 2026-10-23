@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 12px; color: #222; }
+    h3 { margin: 0 0 10px; font-size: 15px; }
+    label { display: block; font-weight: bold; margin: 10px 0 3px; }
+    input[type=text], input[type=date], input[type=number], select, textarea {
+      width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #bbb; border-radius: 4px; font-size: 13px;
+    }
+    textarea { min-height: 54px; resize: vertical; }
+    .marca { border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; margin-top: 10px; background: #fafafa; }
+    .marca .nombre { font-weight: bold; margin-bottom: 6px; }
+    .fila { display: flex; gap: 8px; align-items: flex-end; }
+    .fila > div { flex: 1; }
+    .fila label { margin-top: 0; font-weight: normal; font-size: 12px; color: #555; }
+    .oferta { margin-top: 6px; }
+    button { margin-top: 14px; width: 100%; padding: 9px; font-size: 14px; border: 0; border-radius: 4px;
+             background: #1a73e8; color: #fff; cursor: pointer; }
+    button:disabled { background: #9bbcf0; cursor: default; }
+    #mensaje { margin-top: 10px; padding: 8px; border-radius: 4px; display: none; }
+    #mensaje.ok { display: block; background: #e6f4ea; color: #137333; }
+    #mensaje.error { display: block; background: #fce8e6; color: #c5221f; }
+  </style>
+</head>
+<body>
+  <h3>Registrar visita</h3>
+
+  <label for="fecha">Fecha</label>
+  <input type="date" id="fecha">
+
+  <label for="pdv">PDV (punto de venta)</label>
+  <input type="text" id="pdv" list="listaPdv" placeholder="Ej. Tienda Doña Rosa" autocomplete="off">
+  <datalist id="listaPdv"></datalist>
+
+  <div id="marcas"></div>
+
+  <label for="obs">Observaciones</label>
+  <textarea id="obs" placeholder="Opcional"></textarea>
+
+  <button id="guardar" onclick="guardar()">Guardar visita</button>
+  <div id="mensaje"></div>
+
+  <script>
+    var DATOS = { marcas: [], ofertas: [] };
+
+    function idSeguro(texto) {
+      return texto.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    }
+
+    function construir(datos) {
+      DATOS = datos;
+      document.getElementById('fecha').value = datos.hoy;
+
+      var dl = document.getElementById('listaPdv');
+      datos.pdvs.forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p;
+        dl.appendChild(o);
+      });
+
+      var cont = document.getElementById('marcas');
+      datos.marcas.forEach(function (marca) {
+        var id = idSeguro(marca);
+        var opciones = datos.ofertas.map(function (of) {
+          return '<option value="' + of.replace(/"/g, '&quot;') + '">' + of + '</option>';
+        }).join('');
+
+        var div = document.createElement('div');
+        div.className = 'marca';
+        div.innerHTML =
+          '<div class="nombre">' + marca + '</div>' +
+          '<div class="fila">' +
+            '<div><label>Unidades</label><input type="number" min="0" step="1" value="0" id="u_' + id + '"></div>' +
+            '<div><label>¿Vendió oferta?</label>' +
+              '<select id="v_' + id + '" onchange="toggleOferta(\'' + id + '\')">' +
+                '<option value="No">No</option><option value="Sí">Sí</option>' +
+              '</select></div>' +
+          '</div>' +
+          '<div class="oferta"><label>¿Cuál oferta?</label>' +
+            '<select id="o_' + id + '" disabled><option value="">— Selecciona —</option>' + opciones + '</select>' +
+          '</div>';
+        cont.appendChild(div);
+      });
+    }
+
+    function toggleOferta(id) {
+      var vendio = document.getElementById('v_' + id).value === 'Sí';
+      var sel = document.getElementById('o_' + id);
+      sel.disabled = !vendio;
+      if (!vendio) sel.value = '';
+    }
+
+    function mostrar(texto, tipo) {
+      var m = document.getElementById('mensaje');
+      m.textContent = texto;
+      m.className = tipo;
+    }
+
+    function guardar() {
+      var boton = document.getElementById('guardar');
+      var datos = {
+        fecha: document.getElementById('fecha').value,
+        pdv: document.getElementById('pdv').value,
+        observaciones: document.getElementById('obs').value,
+        marcas: DATOS.marcas.map(function (marca) {
+          var id = idSeguro(marca);
+          return {
+            marca: marca,
+            unidades: document.getElementById('u_' + id).value,
+            vendioOferta: document.getElementById('v_' + id).value === 'Sí',
+            oferta: document.getElementById('o_' + id).value
+          };
+        })
+      };
+
+      if (!datos.pdv.trim()) { mostrar('Escribe el nombre del PDV.', 'error'); return; }
+      for (var i = 0; i < datos.marcas.length; i++) {
+        var m = datos.marcas[i];
+        if (m.vendioOferta && !m.oferta) {
+          mostrar('Selecciona cuál oferta vendiste para ' + m.marca + '.', 'error');
+          return;
+        }
+      }
+
+      boton.disabled = true;
+      mostrar('Guardando…', 'ok');
+      google.script.run
+        .withSuccessHandler(function (msg) {
+          mostrar(msg, 'ok');
+          boton.disabled = false;
+          limpiar();
+        })
+        .withFailureHandler(function (err) {
+          mostrar(err.message || String(err), 'error');
+          boton.disabled = false;
+        })
+        .guardarVisita(datos);
+    }
+
+    function limpiar() {
+      document.getElementById('obs').value = '';
+      DATOS.marcas.forEach(function (marca) {
+        var id = idSeguro(marca);
+        document.getElementById('u_' + id).value = 0;
+        document.getElementById('v_' + id).value = 'No';
+        toggleOferta(id);
+      });
+      // Se conserva el PDV y la fecha por si se registra otra visita seguida.
+      var pdv = document.getElementById('pdv').value.trim();
+      if (pdv && !DATOS.pdvs.some(function (p) { return p.toLowerCase() === pdv.toLowerCase(); })) {
+        DATOS.pdvs.push(pdv);
+        var o = document.createElement('option');
+        o.value = pdv;
+        document.getElementById('listaPdv').appendChild(o);
+      }
+    }
+
+    google.script.run
+      .withSuccessHandler(construir)
+      .withFailureHandler(function (err) { mostrar('No se pudo cargar: ' + (err.message || err), 'error'); })
+      .obtenerDatosFormulario();
+  </script>
+</body>
+</html>
