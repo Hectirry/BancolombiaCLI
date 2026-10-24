@@ -5,10 +5,12 @@ registran, por cada **PDV (punto de venta)** y por cada marca (**Savital, Dove, 
 Nutribella, Alma de Romero**):
 
 - si **hay presencia** de la marca o no,
-- si hay presencia, **cuál oferta se negoció** ("Ninguna" si no se negoció ninguna).
+- si hay presencia, **qué ofertas se negociaron** (varias a la vez; "Ninguna" si no se negoció ninguna).
 
-La encuesta (`Index.html` + la función `doGet` de `Code.gs`) funciona paso a paso: código del PDV → una pantalla
-por marca (¿hay presencia? y, si la hay, ¿cuál oferta negociaste?) → revisar → enviar → acumulado del PDV. La fecha
+La encuesta (`Index.html` + la función `doGet` de `Code.gs`) funciona paso a paso: código del PDV → **presencia**
+de todas las marcas en una sola pantalla (Sí/No) → **ofertas negociadas** de las marcas con presencia (selección
+múltiple, con "Otra" y "Ninguna") → revisar → enviar → acumulado del PDV. Si ninguna marca tiene presencia se salta
+el paso de ofertas. La fecha
 se toma automáticamente. El avance se guarda en el celular y, al enviar, las respuestas caen en la hoja `Registros`.
 
 > Esta carpeta es independiente del CLI de Bancolombia; solo vive aquí para tener el
@@ -50,8 +52,8 @@ Se crean tres hojas:
 | Hoja        | Para qué sirve |
 |-------------|----------------|
 | `Config`    | Columna A: marcas. Columna B: ofertas. Edítalas a mano y los desplegables se actualizan solos. |
-| `Registros` | Una fila por PDV + marca + visita, también cuando no hay presencia: Fecha, Código PDV, Marca, Presencia (Sí/No), Oferta negociada, Registrado por, Marca de tiempo, ID envío (evita duplicados si el celular reintenta). Sin presencia, la oferta queda en "—"; con presencia y sin oferta, en "Ninguna". |
-| `Resumen`   | Una fila por PDV y marca: visitas, visitas con presencia, % de presencia, veces con oferta negociada, qué ofertas se negociaron (y cuántas veces), última visita y su resultado ("Sin presencia", "Presente · 2x1", "Presente · sin oferta"). |
+| `Registros` | Una fila por PDV + marca + visita, también cuando no hay presencia: Fecha, Código PDV, Marca, Presencia (Sí/No), Oferta negociada, Registrado por, Marca de tiempo, ID envío (evita duplicados si el celular reintenta). Si se negociaron varias ofertas van en la misma celda separadas por coma ("2x1, Descuento 20%"). Sin presencia queda "—"; con presencia y sin oferta, "Ninguna". |
+| `Resumen`   | Una fila por PDV y marca: visitas, visitas con presencia, % de presencia, veces con oferta negociada, cuántas veces se negoció cada oferta, última visita y su resultado ("Sin presencia", "Presente · 2x1, Descuento 20%", "Presente · sin oferta"). |
 
 Si la hoja `Registros` todavía tiene las columnas de la versión anterior (con Unidades), el
 script la ajusta solo al cargar la encuesta: si está vacía, cambia los encabezados; si tiene
@@ -60,25 +62,26 @@ datos, la renombra a `Registros (formato anterior)` para no perderlos y crea una
 ## Uso diario
 
 - **PDV → Registrar visita**: abre una barra lateral con la fecha, el código del PDV
-  (autocompleta los ya registrados) y un bloque por marca con "¿Hay presencia?" y, si la
-  hay, "¿Cuál oferta negociaste?". Hay que responder todas las marcas. Al guardar se agrega
-  una fila por marca a `Registros` y se recalcula `Resumen`.
+  (autocompleta los ya registrados), la sección **1. Presencia** (Sí/No por marca) y la
+  sección **2. Ofertas negociadas**, con casillas para cada marca con presencia. Hay que
+  responder todas las marcas. Al guardar se agrega una fila por marca a `Registros` y se
+  recalcula `Resumen`.
 - **PDV → Consultar un PDV**: escribe parte del código y muestra el detalle por marca.
 - **PDV → Actualizar resumen**: recalcula `Resumen` si editaste `Registros` a mano.
-- También puedes escribir directamente en `Registros`: las columnas Marca, Presencia y
-  Oferta negociada tienen listas desplegables. Si pones "No" en Presencia, la oferta se pone
-  en "—"; si eliges una oferta, Presencia pasa a "Sí".
+- También puedes escribir directamente en `Registros`: Marca y Presencia tienen listas
+  desplegables; en Oferta negociada escribe las ofertas separadas por coma. Si pones "No" en
+  Presencia, la oferta se pone en "—"; si escribes una oferta, Presencia pasa a "Sí".
 
 ## Registrar desde el celular (Google Forms)
 
 **PDV → Crear formulario de Google (celular)** crea un formulario con una sección por marca
-(¿hay presencia?, ¿cuál oferta negociaste?), lo enlaza a la hoja y deja un disparador que
+(¿hay presencia? y casillas para ¿qué ofertas negociaste?), lo enlaza a la hoja y deja un disparador que
 copia cada respuesta a `Registros` y recalcula `Resumen`. El cuadro final muestra el enlace
 para compartir con el vendedor.
 
 Si después cambias las marcas u ofertas en `Config`, vuelve a crear el formulario (o edita
 las preguntas conservando el formato `Marca - ¿Hay presencia?` y
-`Marca - ¿Cuál oferta negociaste?`, que es lo que usa el script para leer las respuestas).
+`Marca - ¿Qué ofertas negociaste?`, que es lo que usa el script para leer las respuestas).
 
 ## Personalizar
 

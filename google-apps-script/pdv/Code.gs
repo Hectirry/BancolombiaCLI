@@ -4,7 +4,8 @@
  * Qué registra por cada PDV y marca:
  *   - Marca (Savital, Dove, Sedal, Nutribella, Alma de Romero)
  *   - Si hay presencia de la marca o no
- *   - Si hay presencia: cuál oferta se negoció ("Ninguna" si no se negoció)
+ *   - Si hay presencia: qué ofertas se negociaron (varias posibles; "Ninguna" si no
+ *     se negoció ninguna). Se guardan juntas en una celda, separadas por coma.
  *
  * Instalación: abre una hoja de cálculo de Google → Extensiones → Apps Script,
  * pega este archivo como Code.gs y Sidebar.html como archivo HTML, guarda y
@@ -52,8 +53,31 @@ var CONFIG = {
   // Oferta cuando la marca no tiene presencia.
   SIN_OFERTA: '—',
   // Oferta cuando hay presencia pero no se negoció ninguna.
-  NINGUNA: 'Ninguna'
+  NINGUNA: 'Ninguna',
+  // Separador cuando una marca tiene varias ofertas en la misma celda.
+  SEPARADOR_OFERTAS: ', '
 };
+
+/**
+ * Ofertas negociadas de una marca, limpias y sin repetir. Acepta una lista o el
+ * texto de una celda ("2x1, Descuento 20%"). "Ninguna" solo queda si es la única.
+ * @param {string[]|string} valor
+ * @return {string[]}
+ */
+function normalizarOfertas(valor) {
+  var lista = Array.isArray(valor) ? valor : String(valor == null ? '' : valor).split(',');
+  var vistas = {};
+  var limpias = [];
+  lista.forEach(function (o) {
+    // La coma separa ofertas en la celda, así que no puede ir dentro de una.
+    var t = String(o == null ? '' : o).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t || t === CONFIG.SIN_OFERTA || vistas[t.toLowerCase()]) return;
+    vistas[t.toLowerCase()] = true;
+    limpias.push(t);
+  });
+  var reales = limpias.filter(function (o) { return o !== CONFIG.NINGUNA; });
+  return reales.length ? reales : limpias;
+}
 
 /** true si el texto es "Sí"/"Si" (sin importar mayúsculas). */
 function esSi(v) {
@@ -161,7 +185,7 @@ function configurarHojas() {
 }
 
 /**
- * Listas desplegables en Registros: Marca, Presencia y Oferta negociada.
+ * Listas desplegables en Registros: Marca y Presencia.
  * Se vuelve a ejecutar cada vez que se guarda una visita, para que los cambios
  * en la hoja Config se reflejen sin hacer nada más.
  */
@@ -172,7 +196,6 @@ function aplicarValidaciones() {
 
   var filas = Math.max(registros.getMaxRows() - 1, 1);
   var marcas = leerLista('marcas');
-  var ofertas = leerLista('ofertas').concat([CONFIG.NINGUNA, CONFIG.SIN_OFERTA]);
 
   registros.getRange(2, CONFIG.COL.MARCA, filas, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(marcas, true).setAllowInvalid(false).build()
@@ -180,10 +203,8 @@ function aplicarValidaciones() {
   registros.getRange(2, CONFIG.COL.PRESENCIA, filas, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(['Sí', 'No'], true).setAllowInvalid(false).build()
   );
-  // "Otra" oferta escrita a mano también se acepta.
-  registros.getRange(2, CONFIG.COL.OFERTA, filas, 1).setDataValidation(
-    SpreadsheetApp.newDataValidation().requireValueInList(ofertas, true).setAllowInvalid(true).build()
-  );
+  // Oferta negociada puede tener varias ofertas separadas por coma: sin lista desplegable.
+  registros.getRange(2, CONFIG.COL.OFERTA, filas, 1).clearDataValidations();
 }
 
 /**
@@ -253,7 +274,8 @@ function listarPDVs() {
  * Se guarda una fila por cada marca, tenga presencia o no.
  *
  * @param {{fecha: string, pdv: string, vendedor: string, idEnvio: string,
- *          marcas: {marca: string, presencia: boolean|string, oferta: string}[]}} datos
+ *          marcas: {marca: string, presencia: boolean|string, ofertas: string[], oferta: string}[]}} datos
+ *        `ofertas` es la lista de ofertas negociadas; `oferta` (una sola) se acepta por compatibilidad.
  * @return {{pdv: string, filas: number, conPresencia: number, conOferta: number, duplicado: boolean}}
  */
 function registrarVisita(datos) {
@@ -283,13 +305,14 @@ function registrarVisita(datos) {
   (datos.marcas || []).forEach(function (m) {
     if (!m || !m.marca) return;
     var presencia = esSi(m.presencia);
-    var oferta = presencia ? String(m.oferta || '').trim() : CONFIG.SIN_OFERTA;
-    if (presencia && !oferta) {
-      throw new Error('Indica la oferta negociada para ' + m.marca + ' (o "' + CONFIG.NINGUNA + '").');
+    var ofertas = presencia ? normalizarOfertas(Array.isArray(m.ofertas) ? m.ofertas : (m.oferta || '')) : [];
+    if (presencia && !ofertas.length) {
+      throw new Error('Indica las ofertas negociadas para ' + m.marca + ' (o "' + CONFIG.NINGUNA + '").');
     }
     if (presencia) conPresencia++;
-    if (presencia && oferta !== CONFIG.NINGUNA) conOferta++;
-    filas.push([fecha, pdv, m.marca, presencia ? 'Sí' : 'No', oferta, usuario, ahora, idEnvio]);
+    if (presencia && ofertas[0] !== CONFIG.NINGUNA) conOferta++;
+    var celda = presencia ? ofertas.join(CONFIG.SEPARADOR_OFERTAS) : CONFIG.SIN_OFERTA;
+    filas.push([fecha, pdv, m.marca, presencia ? 'Sí' : 'No', celda, usuario, ahora, idEnvio]);
   });
 
   if (!filas.length) {
@@ -297,6 +320,8 @@ function registrarVisita(datos) {
   }
 
   var inicio = registros.getLastRow() + 1;
+  // El código del PDV va como texto: así "0042" no pierde los ceros ni "1" se vuelve número.
+  registros.getRange(inicio, CONFIG.COL.PDV, filas.length, 1).setNumberFormat('@');
   registros.getRange(inicio, 1, filas.length, filas[0].length).setValues(filas);
   registros.getRange(inicio, CONFIG.COL.FECHA, filas.length, 1).setNumberFormat('yyyy-mm-dd');
   registros.getRange(inicio, CONFIG.COL.TIMESTAMP, filas.length, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
@@ -380,9 +405,10 @@ function leerRegistros() {
     });
 }
 
-/** true si el registro tiene presencia y una oferta negociada real. */
-function tieneOferta(r) {
-  return r.presencia && !!r.oferta && r.oferta !== CONFIG.NINGUNA && r.oferta !== CONFIG.SIN_OFERTA;
+/** Ofertas reales negociadas en un registro (sin "Ninguna" ni "—"). */
+function ofertasReales(r) {
+  if (!r.presencia) return [];
+  return normalizarOfertas(r.oferta).filter(function (o) { return o !== CONFIG.NINGUNA; });
 }
 
 /**
@@ -410,14 +436,15 @@ function calcularResumen(registros) {
     var g = grupos[clave];
     g.visitas += 1;
     if (r.presencia) g.presencia += 1;
-    if (tieneOferta(r)) {
+    var reales = ofertasReales(r);
+    if (reales.length) {
       g.conOferta += 1;
-      g.ofertas[r.oferta] = (g.ofertas[r.oferta] || 0) + 1;
+      reales.forEach(function (o) { g.ofertas[o] = (g.ofertas[o] || 0) + 1; });
     }
     if (r.fecha && (!g.ultimaVisita || r.fecha >= g.ultimaVisita)) {
       g.ultimaVisita = r.fecha;
       g.ultimoResultado = !r.presencia ? 'Sin presencia'
-        : (tieneOferta(r) ? 'Presente · ' + r.oferta : 'Presente · sin oferta');
+        : (reales.length ? 'Presente · ' + reales.join(CONFIG.SEPARADOR_OFERTAS) : 'Presente · sin oferta');
     }
   });
 
@@ -522,7 +549,7 @@ function crearFormularioGoogle() {
   var ofertas = leerLista('ofertas');
 
   var form = FormApp.create('Visita PDV — ' + ss.getName());
-  form.setDescription('Registra por cada marca si hay presencia y, si la hay, cuál oferta negociaste.');
+  form.setDescription('Registra por cada marca si hay presencia y, si la hay, qué ofertas negociaste.');
   form.setCollectEmail(false);
 
   form.addDateItem().setTitle('Fecha de la visita').setRequired(true);
@@ -534,9 +561,9 @@ function crearFormularioGoogle() {
       .setTitle(marca + ' - ¿Hay presencia?')
       .setChoiceValues(['Sí', 'No'])
       .setRequired(true);
-    form.addListItem()
-      .setTitle(marca + ' - ¿Cuál oferta negociaste?')
-      .setHelpText('Solo si hay presencia.')
+    form.addCheckboxItem()
+      .setTitle(marca + ' - ¿Qué ofertas negociaste?')
+      .setHelpText('Solo si hay presencia. Puedes marcar varias.')
       .setChoiceValues(ofertas.concat([CONFIG.NINGUNA]));
   });
 
@@ -583,7 +610,7 @@ function procesarRespuestaFormulario(e) {
     return {
       marca: marca,
       presencia: esSi(primero(marca + ' - ¿Hay presencia?')),
-      oferta: primero(marca + ' - ¿Cuál oferta negociaste?')
+      ofertas: normalizarOfertas(primero(marca + ' - ¿Qué ofertas negociaste?'))
     };
   });
 
@@ -595,7 +622,7 @@ function procesarRespuestaFormulario(e) {
       pdv,
       m.marca,
       m.presencia ? 'Sí' : 'No',
-      m.presencia ? (m.oferta || CONFIG.NINGUNA) : CONFIG.SIN_OFERTA,
+      m.presencia ? (m.ofertas.length ? m.ofertas.join(CONFIG.SEPARADOR_OFERTAS) : CONFIG.NINGUNA) : CONFIG.SIN_OFERTA,
       primero('Dirección de correo electrónico') || 'Formulario',
       new Date(),
       ''
@@ -604,6 +631,8 @@ function procesarRespuestaFormulario(e) {
 
   var registros = prepararRegistros();
   var inicio = registros.getLastRow() + 1;
+  // El código del PDV va como texto: así "0042" no pierde los ceros ni "1" se vuelve número.
+  registros.getRange(inicio, CONFIG.COL.PDV, filas.length, 1).setNumberFormat('@');
   registros.getRange(inicio, 1, filas.length, filas[0].length).setValues(filas);
   registros.getRange(inicio, CONFIG.COL.FECHA, filas.length, 1).setNumberFormat('yyyy-mm-dd');
   registros.getRange(inicio, CONFIG.COL.TIMESTAMP, filas.length, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
