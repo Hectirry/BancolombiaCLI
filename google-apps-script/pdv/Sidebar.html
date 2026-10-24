@@ -15,6 +15,7 @@
     .fila { display: flex; align-items: center; gap: 8px; border: 1px solid #ddd; border-radius: 6px;
             padding: 6px 10px; margin-top: 6px; background: #fafafa; }
     .fila .nombre { flex: 1; font-weight: bold; }
+    .fila .nombre small { font-weight: normal; color: #666; margin-left: 4px; }
     .fila label { display: inline; font-weight: normal; margin: 0 0 0 8px; }
     .marca { border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; margin-top: 8px; background: #fafafa; }
     .marca .nombre { font-weight: bold; margin-bottom: 4px; }
@@ -45,8 +46,8 @@
   <div id="presencia"></div>
 
   <h4>2. Ofertas negociadas</h4>
-  <p class="ayuda">Solo marcas con presencia. Puedes marcar varias ofertas por marca.</p>
-  <div id="ofertas"><p id="sinOfertas">Marca Sí en alguna marca para elegir sus ofertas.</p></div>
+  <p class="ayuda">Solo marcas con presencia que tienen promo. Puedes marcar varias ofertas por marca.</p>
+  <div id="ofertas"><p id="sinOfertas">Marca Sí en alguna marca con promo para elegir sus ofertas.</p></div>
 
   <button id="guardar" onclick="guardar()">Guardar visita</button>
   <div id="mensaje"></div>
@@ -54,7 +55,7 @@
   <script>
     var NINGUNA = 'Ninguna';
     var OTRA = 'Otra';
-    var DATOS = { marcas: [], ofertas: [], pdvs: [] };
+    var DATOS = { marcas: [], ofertas: [], sinPromo: [], pdvs: [] };
 
     function idSeguro(texto) {
       return texto.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -64,6 +65,12 @@
       return String(texto).replace(/[&<>"']/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
       });
+    }
+
+    // Marcas sin promo (columna "Con promo" de Config): solo se registra presencia.
+    function tienePromo(marca) {
+      var k = String(marca).trim().toLowerCase();
+      return !(DATOS.sinPromo || []).some(function (x) { return String(x).trim().toLowerCase() === k; });
     }
 
     function presencia(marca) {
@@ -91,10 +98,11 @@
         var fila = document.createElement('div');
         fila.className = 'fila';
         fila.id = 'fp_' + id;
-        fila.innerHTML = '<span class="nombre">' + esc(marca) + '</span>' +
+        fila.innerHTML = '<span class="nombre">' + esc(marca) + (tienePromo(marca) ? '' : '<small>(sin promo)</small>') + '</span>' +
           '<label><input type="radio" name="p_' + id + '" value="Sí" onchange="cambiarPresencia(\'' + id + '\')"> Sí</label>' +
           '<label><input type="radio" name="p_' + id + '" value="No" onchange="cambiarPresencia(\'' + id + '\')"> No</label>';
         contP.appendChild(fila);
+        if (!tienePromo(marca)) return;
 
         var bloque = document.createElement('div');
         bloque.className = 'marca';
@@ -113,15 +121,15 @@
       var presente = document.querySelector('input[name="p_' + id + '"]:checked').value === 'Sí';
       document.getElementById('fp_' + id).classList.remove('error');
       var bloque = document.getElementById('fo_' + id);
-      bloque.hidden = !presente;
-      if (!presente) {
+      if (bloque) bloque.hidden = !presente;
+      if (bloque && !presente) {
         Array.prototype.forEach.call(bloque.querySelectorAll('input[type=checkbox]'), function (c) { c.checked = false; });
         var t = document.getElementById('t_' + id);
         t.value = '';
         t.hidden = true;
         bloque.classList.remove('error');
       }
-      var alguna = DATOS.marcas.some(function (m) { return presencia(m) === 'Sí'; });
+      var alguna = DATOS.marcas.some(function (m) { return tienePromo(m) && presencia(m) === 'Sí'; });
       document.getElementById('sinOfertas').hidden = alguna;
     }
 
@@ -167,8 +175,9 @@
       for (var i = 0; i < DATOS.marcas.length; i++) {
         var marca = DATOS.marcas[i], id = idSeguro(marca), p = presencia(marca);
         if (!p) { fallar('fp_' + id, 'Responde si hay presencia de ' + marca + '.'); return; }
-        var ofertas = p === 'Sí' ? ofertasMarcadas(id) : [];
-        if (p === 'Sí' && !ofertas.length) { fallar('fo_' + id, 'Elige al menos una oferta para ' + marca + ', o "' + NINGUNA + '".'); return; }
+        var promo = tienePromo(marca);
+        var ofertas = p === 'Sí' && promo ? ofertasMarcadas(id) : [];
+        if (p === 'Sí' && promo && !ofertas.length) { fallar('fo_' + id, 'Elige al menos una oferta para ' + marca + ', o "' + NINGUNA + '".'); return; }
         if (ofertas.indexOf('') !== -1) { fallar('fo_' + id, 'Describe la otra oferta de ' + marca + '.'); return; }
         marcas.push({ marca: marca, presencia: p === 'Sí', ofertas: ofertas });
       }
@@ -191,6 +200,7 @@
     function limpiar(pdv) {
       Array.prototype.forEach.call(document.querySelectorAll('#presencia input, #ofertas input[type=checkbox]'), function (c) { c.checked = false; });
       DATOS.marcas.forEach(function (marca) {
+        if (!tienePromo(marca)) return;
         var id = idSeguro(marca);
         document.getElementById('fo_' + id).hidden = true;
         var t = document.getElementById('t_' + id);

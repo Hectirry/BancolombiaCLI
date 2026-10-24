@@ -139,6 +139,7 @@ textarea.field{min-height:72px;resize:vertical}
 .tag.multi[aria-pressed="true"]::after{content:"✓";border-color:var(--accent);background:var(--accent);color:#fff;font-size:13px;line-height:14px;text-align:center}
 .tag.multi.no[aria-pressed="true"]::after{border-color:var(--no);background:var(--no)}
 .pills{display:flex;flex-wrap:wrap;gap:6px}
+.pname small{display:block;font-size:12px;font-weight:700;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -153,6 +154,7 @@ var CFG = /*CFG*/{
   "titulo": "Visita PDV",
   "marcas": ["Savital", "Dove", "Sedal", "Nutribella", "Alma de Romero"],
   "ofertas": ["2x1", "Pague 2 lleve 3", "Descuento 20%", "Combo shampoo + acondicionador", "Regalo por compra"],
+  "sinPromo": ["Nutribella", "Alma de Romero"],
   "pdvs": [],
   "equipo": "Equipo de ventas"
 }/*/CFG*/;
@@ -173,6 +175,9 @@ function uuid(){ return 'v'+Date.now().toString(36)+Math.random().toString(36).s
 function fmtFecha(iso){ if (!/^\d{4}-\d{2}-\d{2}$/.test(iso||'')) return iso||''; var x = iso.split('-'); return x[2]+'/'+x[1]+'/'+x[0]; }
 function A(m){ if (!S.ans[m]) S.ans[m] = {}; var a = S.ans[m]; if (!a.ofertas) a.ofertas = []; return a; }
 function presentes(){ return CFG.marcas.filter(function(m){ return A(m).presencia === 'Sí'; }); }
+/* Marcas sin promo (columna "Con promo" de Config): solo se pregunta presencia. */
+function tienePromo(m){ var k = String(m).trim().toLowerCase(); return !(CFG.sinPromo||[]).some(function(x){ return String(x).trim().toLowerCase() === k; }); }
+function conOfertas(){ return presentes().filter(tienePromo); }
 /* Ofertas que se envían para una marca: "Otra" se cambia por el texto escrito. */
 function ofertasDe(a){
   if (a.presencia !== 'Sí') return [];
@@ -224,7 +229,7 @@ function remote(db){
         var seen = {}, pdvs = CFG.pdvs.slice();
         pdvs.forEach(function(p){ seen[pdvKey(p)] = 1; });
         snap.docs.forEach(function(d){ var v = d.data() || {}; var k = pdvKey(v.pdv); if (v.pdv && !seen[k]){ seen[k] = 1; pdvs.push(String(v.pdv)); } });
-        return { marcas: CFG.marcas, ofertas: CFG.ofertas, pdvs: pdvs.sort(function(a,b){ return a.localeCompare(b,'es'); }) };
+        return { marcas: CFG.marcas, ofertas: CFG.ofertas, sinPromo: CFG.sinPromo, pdvs: pdvs.sort(function(a,b){ return a.localeCompare(b,'es'); }) };
       }).catch(function(e){ throw dbErr(e); });
     },
     apiSubmit: function(p){
@@ -258,7 +263,8 @@ function acumulado(pdv, regs){
       if (rs.length){ g[k].conOferta++; rs.forEach(function(o){ g[k].ofertas[o] = (g[k].ofertas[o]||0)+1; }); }
     }
   });
-  return { pdv: pdv, visitas: Object.keys(visitas).length, marcas: CFG.marcas.map(function(m){ return g[m] || { marca:m, visitas:0, presencia:0, conOferta:0, ofertas:{} }; }) };
+  return { pdv: pdv, visitas: Object.keys(visitas).length, marcas: CFG.marcas.map(function(m){
+    var x = g[m] || { marca:m, visitas:0, presencia:0, conOferta:0, ofertas:{} }; x.sinPromo = !tienePromo(m); return x; }) };
 }
 
 /* Simulación para la vista previa: guarda en este navegador y calcula el acumulado igual que el servidor. */
@@ -268,7 +274,7 @@ var mock = {
   apiConfig: function(){
     var pdvs = CFG.pdvs.slice();
     mock._rows().forEach(function(r){ if (pdvs.indexOf(r.pdv) === -1) pdvs.push(r.pdv); });
-    return { marcas: CFG.marcas, ofertas: CFG.ofertas, pdvs: pdvs.sort() };
+    return { marcas: CFG.marcas, ofertas: CFG.ofertas, sinPromo: CFG.sinPromo, pdvs: pdvs.sort() };
   },
   apiSubmit: function(p){
     var rows = mock._rows();
@@ -331,7 +337,7 @@ function vPresencia(){
   var h = '<h2>¿Hay presencia de estas marcas?</h2><p class="sub">Marca Sí o No en cada una.</p>';
   CFG.marcas.forEach(function(m){
     var cur = A(m).presencia;
-    h += blk(['p:'+m], '<div class="prow"><span class="pname">'+esc(m)+'</span><div class="tags" role="radiogroup" aria-label="Presencia de '+esc(m)+'">'+
+    h += blk(['p:'+m], '<div class="prow"><span class="pname">'+esc(m)+(tienePromo(m) ? '' : '<small>Sin promo</small>')+'</span><div class="tags" role="radiogroup" aria-label="Presencia de '+esc(m)+'">'+
       [{v:'Sí',c:'yes'},{v:'No',c:'no'}].map(function(o){
         return '<button type="button" class="tag '+o.c+'" aria-pressed="'+(cur===o.v)+'" data-pres="'+esc(m)+'" data-v="'+o.v+'">'+o.v+'</button>';
       }).join('')+'</div></div>'+msg('p:'+m), 'compact');
@@ -348,7 +354,7 @@ function validatePresencia(){
 /* Paso 2: ofertas negociadas, solo para las marcas con presencia. Selección múltiple. */
 function vOfertas(){
   var h = '<h2>Ofertas negociadas</h2><p class="sub">Elige todas las que negociaste en cada marca. Puedes marcar varias.</p>';
-  presentes().forEach(function(m, idx){
+  conOfertas().forEach(function(m, idx){
     var a = A(m);
     var inner = '<p class="q">'+esc(m)+'</p><div class="tags col" role="group" aria-label="Ofertas de '+esc(m)+'">'+
       CFG.ofertas.concat([OTRA, NINGUNA]).map(function(o){
@@ -369,7 +375,7 @@ function vOfertas(){
 }
 function validateOfertas(){
   var e = {};
-  presentes().forEach(function(m){
+  conOfertas().forEach(function(m){
     var a = A(m);
     if (!a.ofertas.length) e['o:'+m] = 'Elige al menos una oferta, o "'+NINGUNA+'".';
     else if (a.ofertas.indexOf(OTRA) !== -1 && !String(a.otra||'').trim()) e['t:'+m] = 'Describe la otra oferta.';
@@ -381,14 +387,15 @@ function vReview(){
   var h = '<h2>Revisar y enviar</h2><p class="sub">PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p>';
   var conPres = 0, conOf = 0;
   CFG.marcas.forEach(function(m, i){
-    var a = A(m), pres = a.presencia === 'Sí', ofs = reales(ofertasDe(a));
+    var a = A(m), pres = a.presencia === 'Sí', promo = tienePromo(m), ofs = promo ? reales(ofertasDe(a)) : [];
     if (pres) conPres++;
     if (ofs.length) conOf++;
     var pills = !pres ? '<span class="pill no">Sin presencia</span>'
-      : (ofs.length ? ofs.map(function(o){ return '<span class="pill yes">'+esc(o)+'</span>'; }).join(' ') : '<span class="pill yes">Presente · sin oferta</span>');
+      : (!promo ? '<span class="pill yes">Presente · sin promo</span>'
+        : (ofs.length ? ofs.map(function(o){ return '<span class="pill yes">'+esc(o)+'</span>'; }).join(' ') : '<span class="pill yes">Presente · sin oferta</span>'));
     h += '<div class="block brandcard '+(pres?'ok':'off')+'"><div class="n">'+(i+1)+'</div><div><h3>'+esc(m)+'</h3>'+
       '<p class="meta">'+(pres ? 'Con presencia' : 'Sin presencia')+'</p><div class="pills">'+pills+'</div>'+
-      '<div><button class="link" data-act="'+(pres ? 'toOf' : 'toPres')+'">'+(pres ? 'Editar ofertas' : 'Editar presencia')+'</button></div></div></div>';
+      '<div><button class="link" data-act="'+(pres && promo ? 'toOf' : 'toPres')+'">'+(pres && promo ? 'Editar ofertas' : 'Editar presencia')+'</button></div></div></div>';
   });
   h += '<div class="block"><p style="margin:0">Presencia en <b>'+conPres+' de '+CFG.marcas.length+'</b> marcas y oferta negociada en <b>'+conOf+'</b>. Después de enviar ya no podrás editar esta visita.</p></div><div id="sendmsg"></div>';
   app(h);
@@ -398,7 +405,7 @@ function vReview(){
 function buildPayload(){
   if (!S.id) { S.id = uuid(); save(); }
   return { idEnvio:S.id, vendedor:'', pdv:S.pdv.trim(), fecha:S.fecha,
-    marcas: CFG.marcas.map(function(m){ var a = A(m); return { marca:m, presencia:a.presencia==='Sí', ofertas:ofertasDe(a) }; }) };
+    marcas: CFG.marcas.map(function(m){ var a = A(m); return { marca:m, presencia:a.presencia==='Sí', ofertas:tienePromo(m) ? ofertasDe(a) : [] }; }) };
 }
 
 function vResult(){
@@ -413,7 +420,8 @@ function vResult(){
     var pct = x.visitas ? Math.round(x.presencia/x.visitas*100) : 0;
     h += '<li><div class="top-row"><span>'+esc(x.marca)+'</span><span>Presencia '+x.presencia+' de '+x.visitas+'</span></div>'+
       '<div class="meter"><i style="width:'+Math.max(2, pct)+'%"></i></div>'+
-      '<div class="comp"><span>Oferta negociada '+x.conOferta+' de '+x.visitas+'</span>'+(ofs.length?'<span>'+ofs.join(' · ')+'</span>':'')+'</div></li>';
+      '<div class="comp">'+(x.sinPromo ? '<span>Sin promo</span>'
+        : '<span>Oferta negociada '+x.conOferta+' de '+x.visitas+'</span>'+(ofs.length?'<span>'+ofs.join(' · ')+'</span>':''))+'</div></li>';
   });
   h += '</ul></div>';
   app(h);
@@ -452,14 +460,14 @@ var ACT = {
   presNext: function(){
     errs = validatePresencia();
     if (Object.keys(errs).length){ render(); irAlError(); return; }
-    go(presentes().length ? 'ofertas' : 'review');
+    go(conOfertas().length ? 'ofertas' : 'review');
   },
   ofNext: function(){
     errs = validateOfertas();
     if (Object.keys(errs).length){ render(); irAlError(); return; }
     go('review');
   },
-  backFromReview: function(){ go(presentes().length ? 'ofertas' : 'presencia'); },
+  backFromReview: function(){ go(conOfertas().length ? 'ofertas' : 'presencia'); },
   send: function(btn){
     if (Object.keys(validatePresencia()).length){ go('presencia'); ACT.presNext(); return; }
     if (Object.keys(validateOfertas()).length){ go('ofertas'); ACT.ofNext(); return; }
@@ -480,6 +488,7 @@ if (!MOCK) callRetry('apiConfig', []).then(function(c){
   var cambio = false;
   if (c && c.marcas && c.marcas.length && c.marcas.join('|') !== CFG.marcas.join('|')) { CFG.marcas = c.marcas; cambio = true; }
   if (c && c.ofertas && c.ofertas.length && c.ofertas.join('|') !== CFG.ofertas.join('|')) { CFG.ofertas = c.ofertas; cambio = true; }
+  if (c && Array.isArray(c.sinPromo) && c.sinPromo.join('|') !== (CFG.sinPromo||[]).join('|')) { CFG.sinPromo = c.sinPromo; cambio = true; }
   if (cambio) render();
 }).catch(function(){});
 </script>

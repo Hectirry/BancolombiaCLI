@@ -6,6 +6,8 @@
  *   - Si hay presencia de la marca o no
  *   - Si hay presencia: qué ofertas se negociaron (varias posibles; "Ninguna" si no
  *     se negoció ninguna). Se guardan juntas en una celda, separadas por coma.
+ *   - Las marcas sin promo (columna "Con promo" = No en Config) solo registran presencia;
+ *     si están presentes, la oferta queda en "No aplica".
  *
  * Instalación: abre una hoja de cálculo de Google → Extensiones → Apps Script,
  * pega este archivo como Code.gs y Sidebar.html como archivo HTML, guarda y
@@ -19,6 +21,10 @@ var CONFIG = {
   HOJA_RESPUESTAS_FORM: 'Respuestas Form',
 
   MARCAS_INICIALES: ['Savital', 'Dove', 'Sedal', 'Nutribella', 'Alma de Romero'],
+  // Marcas que no manejan promociones. Valor inicial de la columna "Con promo" de Config.
+  MARCAS_SIN_PROMO_INICIALES: ['Nutribella', 'Alma de Romero'],
+  // Columna de Config con "Sí"/"No" por marca (A = marca, B = ofertas, C = con promo).
+  COL_CONFIG_PROMO: 3,
   OFERTAS_INICIALES: [
     '2x1',
     'Pague 2 lleve 3',
@@ -55,8 +61,65 @@ var CONFIG = {
   // Oferta cuando hay presencia pero no se negoció ninguna.
   NINGUNA: 'Ninguna',
   // Separador cuando una marca tiene varias ofertas en la misma celda.
-  SEPARADOR_OFERTAS: ', '
+  SEPARADOR_OFERTAS: ', ',
+  // Oferta de una marca presente que no maneja promociones.
+  NO_APLICA: 'No aplica'
 };
+
+function esMismaMarca(a, b) {
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
+/**
+ * Marcas sin promo según la columna "Con promo" de Config ("No" = sin promo).
+ * Si la celda de una marca está vacía se usa CONFIG.MARCAS_SIN_PROMO_INICIALES.
+ * @return {string[]}
+ */
+function marcasSinPromo() {
+  var config = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.HOJA_CONFIG);
+  var porDefecto = function (m) {
+    return CONFIG.MARCAS_SIN_PROMO_INICIALES.some(function (x) { return esMismaMarca(x, m); });
+  };
+  if (!config || config.getLastRow() < 2) return leerLista('marcas').filter(porDefecto);
+  var lista = [];
+  config.getRange(2, 1, config.getLastRow() - 1, CONFIG.COL_CONFIG_PROMO).getValues().forEach(function (f) {
+    var marca = String(f[0]).trim();
+    if (!marca) return;
+    var valor = String(f[CONFIG.COL_CONFIG_PROMO - 1]).trim();
+    if (valor ? !esSi(valor) : porDefecto(marca)) lista.push(marca);
+  });
+  return lista;
+}
+
+/** true si la marca maneja promociones. */
+function tienePromo(marca, sinPromo) {
+  return !(sinPromo || marcasSinPromo()).some(function (x) { return esMismaMarca(x, marca); });
+}
+
+/**
+ * Si Config todavía no tiene la columna "Con promo", la crea con Sí/No por marca.
+ * @return {boolean} true si la acaba de crear.
+ */
+function prepararConfig() {
+  var config = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.HOJA_CONFIG);
+  if (!config) return false;
+  var col = CONFIG.COL_CONFIG_PROMO;
+  if (String(config.getRange(1, col).getValue()).trim() !== '') return false;
+  config.getRange(1, col).setValue('Con promo').setFontWeight('bold');
+  var n = config.getLastRow() - 1;
+  if (n > 0) {
+    config.getRange(2, col, n, 1).setValues(config.getRange(2, 1, n, 1).getValues().map(function (f) {
+      var marca = String(f[0]).trim();
+      if (!marca) return [''];
+      var sin = CONFIG.MARCAS_SIN_PROMO_INICIALES.some(function (x) { return esMismaMarca(x, marca); });
+      return [sin ? 'No' : 'Sí'];
+    }));
+  }
+  config.getRange(2, col, Math.max(config.getMaxRows() - 1, 1), 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(['Sí', 'No'], true).setAllowInvalid(false).build()
+  );
+  return true;
+}
 
 /**
  * Ofertas negociadas de una marca, limpias y sin repetir. Acepta una lista o el
@@ -168,6 +231,7 @@ function configurarHojas() {
     config.setColumnWidth(2, 260);
     config.setFrozenRows(1);
   }
+  prepararConfig();
 
   // Hoja Registros: una fila por PDV + marca + visita.
   var registros = prepararRegistros();
@@ -245,6 +309,7 @@ function obtenerDatosFormulario() {
   return {
     marcas: leerLista('marcas'),
     ofertas: leerLista('ofertas'),
+    sinPromo: marcasSinPromo(),
     pdvs: listarPDVs(),
     hoy: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')
   };
@@ -301,17 +366,20 @@ function registrarVisita(datos) {
   var ahora = new Date();
   var conPresencia = 0;
   var conOferta = 0;
+  var sinPromo = marcasSinPromo();
 
   (datos.marcas || []).forEach(function (m) {
     if (!m || !m.marca) return;
     var presencia = esSi(m.presencia);
-    var ofertas = presencia ? normalizarOfertas(Array.isArray(m.ofertas) ? m.ofertas : (m.oferta || '')) : [];
-    if (presencia && !ofertas.length) {
+    // Las marcas sin promo solo registran presencia: lo que llegue como oferta se ignora.
+    var promo = tienePromo(m.marca, sinPromo);
+    var ofertas = presencia && promo ? normalizarOfertas(Array.isArray(m.ofertas) ? m.ofertas : (m.oferta || '')) : [];
+    if (presencia && promo && !ofertas.length) {
       throw new Error('Indica las ofertas negociadas para ' + m.marca + ' (o "' + CONFIG.NINGUNA + '").');
     }
     if (presencia) conPresencia++;
-    if (presencia && ofertas[0] !== CONFIG.NINGUNA) conOferta++;
-    var celda = presencia ? ofertas.join(CONFIG.SEPARADOR_OFERTAS) : CONFIG.SIN_OFERTA;
+    if (presencia && promo && ofertas[0] !== CONFIG.NINGUNA) conOferta++;
+    var celda = !presencia ? CONFIG.SIN_OFERTA : (promo ? ofertas.join(CONFIG.SEPARADOR_OFERTAS) : CONFIG.NO_APLICA);
     filas.push([fecha, pdv, m.marca, presencia ? 'Sí' : 'No', celda, usuario, ahora, idEnvio]);
   });
 
@@ -361,7 +429,8 @@ function onEdit(e) {
     if (valor === 'No') {
       oferta.setValue(CONFIG.SIN_OFERTA);
     } else if (valor === 'Sí' && String(oferta.getValue()) === CONFIG.SIN_OFERTA) {
-      oferta.setValue(CONFIG.NINGUNA);
+      var marca = hoja.getRange(fila, CONFIG.COL.MARCA).getValue();
+      oferta.setValue(tienePromo(marca) ? CONFIG.NINGUNA : CONFIG.NO_APLICA);
     }
   } else if (col === CONFIG.COL.OFERTA) {
     var ofertaValor = String(e.value || '').trim();
@@ -405,10 +474,10 @@ function leerRegistros() {
     });
 }
 
-/** Ofertas reales negociadas en un registro (sin "Ninguna" ni "—"). */
+/** Ofertas reales negociadas en un registro (sin "Ninguna", "No aplica" ni "—"). */
 function ofertasReales(r) {
   if (!r.presencia) return [];
-  return normalizarOfertas(r.oferta).filter(function (o) { return o !== CONFIG.NINGUNA; });
+  return normalizarOfertas(r.oferta).filter(function (o) { return o !== CONFIG.NINGUNA && o !== CONFIG.NO_APLICA; });
 }
 
 /**
@@ -417,6 +486,7 @@ function ofertasReales(r) {
  */
 function calcularResumen(registros) {
   var ordenMarcas = leerLista('marcas');
+  var sinPromo = marcasSinPromo();
   var grupos = {};
 
   registros.forEach(function (r) {
@@ -429,6 +499,7 @@ function calcularResumen(registros) {
         presencia: 0,
         conOferta: 0,
         ofertas: {},
+        sinPromo: !tienePromo(r.marca, sinPromo),
         ultimaVisita: null,
         ultimoResultado: ''
       };
@@ -444,7 +515,8 @@ function calcularResumen(registros) {
     if (r.fecha && (!g.ultimaVisita || r.fecha >= g.ultimaVisita)) {
       g.ultimaVisita = r.fecha;
       g.ultimoResultado = !r.presencia ? 'Sin presencia'
-        : (reales.length ? 'Presente · ' + reales.join(CONFIG.SEPARADOR_OFERTAS) : 'Presente · sin oferta');
+        : (g.sinPromo ? 'Presente'
+          : (reales.length ? 'Presente · ' + reales.join(CONFIG.SEPARADOR_OFERTAS) : 'Presente · sin oferta'));
     }
   });
 
@@ -493,8 +565,8 @@ function generarResumen() {
       g.visitas,
       g.presencia,
       g.visitas ? g.presencia / g.visitas : 0,
-      g.conOferta,
-      formatearOfertas(g.ofertas) || '—',
+      g.sinPromo ? CONFIG.NO_APLICA : g.conOferta,
+      g.sinPromo ? CONFIG.NO_APLICA : (formatearOfertas(g.ofertas) || '—'),
       g.ultimaVisita || '',
       g.ultimoResultado
     ];
@@ -526,8 +598,9 @@ function consultarPDV() {
 
   var resumen = calcularResumen(registros);
   var lineas = resumen.map(function (g) {
-    return g.pdv + ' · ' + g.marca + ': presencia en ' + g.presencia + ' de ' + g.visitas + ' visita(s); ' +
-      'oferta negociada ' + g.conOferta + ' vez/veces' +
+    var base = g.pdv + ' · ' + g.marca + ': presencia en ' + g.presencia + ' de ' + g.visitas + ' visita(s)';
+    if (g.sinPromo) return base + ' (sin promo).';
+    return base + '; oferta negociada ' + g.conOferta + ' vez/veces' +
       (g.conOferta ? ' [' + formatearOfertas(g.ofertas) + ']' : '') + '.';
   });
   ui.alert('Detalle del PDV', lineas.join('\n'), ui.ButtonSet.OK);
@@ -547,6 +620,7 @@ function crearFormularioGoogle() {
 
   var marcas = leerLista('marcas');
   var ofertas = leerLista('ofertas');
+  var sinPromo = marcasSinPromo();
 
   var form = FormApp.create('Visita PDV — ' + ss.getName());
   form.setDescription('Registra por cada marca si hay presencia y, si la hay, qué ofertas negociaste.');
@@ -561,6 +635,7 @@ function crearFormularioGoogle() {
       .setTitle(marca + ' - ¿Hay presencia?')
       .setChoiceValues(['Sí', 'No'])
       .setRequired(true);
+    if (!tienePromo(marca, sinPromo)) return;   // sin promo: solo presencia
     form.addCheckboxItem()
       .setTitle(marca + ' - ¿Qué ofertas negociaste?')
       .setHelpText('Solo si hay presencia. Puedes marcar varias.')
@@ -606,9 +681,11 @@ function procesarRespuestaFormulario(e) {
   var fecha = fechaTexto ? new Date(fechaTexto) : new Date();
   if (isNaN(fecha.getTime())) fecha = new Date();
 
+  var sinPromo = marcasSinPromo();
   var marcasVisita = leerLista('marcas').map(function (marca) {
     return {
       marca: marca,
+      promo: tienePromo(marca, sinPromo),
       presencia: esSi(primero(marca + ' - ¿Hay presencia?')),
       ofertas: normalizarOfertas(primero(marca + ' - ¿Qué ofertas negociaste?'))
     };
@@ -622,7 +699,8 @@ function procesarRespuestaFormulario(e) {
       pdv,
       m.marca,
       m.presencia ? 'Sí' : 'No',
-      m.presencia ? (m.ofertas.length ? m.ofertas.join(CONFIG.SEPARADOR_OFERTAS) : CONFIG.NINGUNA) : CONFIG.SIN_OFERTA,
+      !m.presencia ? CONFIG.SIN_OFERTA
+        : (!m.promo ? CONFIG.NO_APLICA : (m.ofertas.length ? m.ofertas.join(CONFIG.SEPARADOR_OFERTAS) : CONFIG.NINGUNA)),
       primero('Dirección de correo electrónico') || 'Formulario',
       new Date(),
       ''
@@ -662,6 +740,7 @@ function apiConfig() {
     equipo: 'Equipo de ventas',
     marcas: leerLista('marcas'),
     ofertas: leerLista('ofertas'),
+    sinPromo: marcasSinPromo(),
     pdvs: listarPDVs()
   };
 }
@@ -686,6 +765,7 @@ function apiResumenPDV(pdv) {
   var nombre = String(pdv || '').trim().toLowerCase();
   var registros = leerRegistros().filter(function (r) { return r.pdv.toLowerCase() === nombre; });
   var resumen = calcularResumen(registros);
+  var sinPromo = marcasSinPromo();
   var porMarca = {};
   resumen.forEach(function (g) { porMarca[g.marca.toLowerCase()] = g; });
 
@@ -697,9 +777,10 @@ function apiResumenPDV(pdv) {
     visitas: Object.keys(visitas).length,
     marcas: leerLista('marcas').map(function (m) {
       var g = porMarca[m.toLowerCase()];
+      var sin = !tienePromo(m, sinPromo);
       return g
-        ? { marca: g.marca, visitas: g.visitas, presencia: g.presencia, conOferta: g.conOferta, ofertas: g.ofertas }
-        : { marca: m, visitas: 0, presencia: 0, conOferta: 0, ofertas: {} };
+        ? { marca: g.marca, visitas: g.visitas, presencia: g.presencia, conOferta: g.conOferta, ofertas: g.ofertas, sinPromo: sin }
+        : { marca: m, visitas: 0, presencia: 0, conOferta: 0, ofertas: {}, sinPromo: sin };
     })
   };
 }
@@ -713,10 +794,11 @@ function configurarHojasSilencioso() {
     config.getRange(2, 1, CONFIG.MARCAS_INICIALES.length, 1).setValues(CONFIG.MARCAS_INICIALES.map(function (m) { return [m]; }));
     config.getRange(2, 2, CONFIG.OFERTAS_INICIALES.length, 1).setValues(CONFIG.OFERTAS_INICIALES.map(function (o) { return [o]; }));
   }
+  var promoNueva = prepararConfig();
   prepararRegistros();
   if (!ss.getSheetByName(CONFIG.HOJA_RESUMEN)) ss.insertSheet(CONFIG.HOJA_RESUMEN);
-  // Si se acaba de crear o limpiar Registros, el resumen viejo ya no aplica.
-  if (REGISTROS_RECREADOS) {
+  // Si se acaba de crear o limpiar Registros, o recién apareció "Con promo", el resumen viejo ya no aplica.
+  if (REGISTROS_RECREADOS || promoNueva) {
     aplicarValidaciones();
     generarResumen();
   }

@@ -6,11 +6,12 @@ Nutribella, Alma de Romero**):
 
 - si **hay presencia** de la marca o no,
 - si hay presencia, **qué ofertas se negociaron** (varias a la vez; "Ninguna" si no se negoció ninguna).
+  Las marcas **sin promo** (por defecto Nutribella y Alma de Romero) solo registran presencia.
 
 La encuesta (`Index.html` + la función `doGet` de `Code.gs`) funciona paso a paso: código del PDV → **presencia**
 de todas las marcas en una sola pantalla (Sí/No) → **ofertas negociadas** de las marcas con presencia (selección
-múltiple, con "Otra" y "Ninguna") → revisar → enviar → acumulado del PDV. Si ninguna marca tiene presencia se salta
-el paso de ofertas. La fecha
+múltiple, con "Otra" y "Ninguna"; solo marcas con promo) → revisar → enviar → acumulado del PDV. Si ninguna marca
+con promo tiene presencia se salta el paso de ofertas. La fecha
 se toma automáticamente. El avance se guarda en el celular y, al enviar, las respuestas caen en la hoja `Registros`.
 
 > Esta carpeta es independiente del CLI de Bancolombia; solo vive aquí para tener el
@@ -51,9 +52,12 @@ Se crean tres hojas:
 
 | Hoja        | Para qué sirve |
 |-------------|----------------|
-| `Config`    | Columna A: marcas. Columna B: ofertas. Edítalas a mano y los desplegables se actualizan solos. |
-| `Registros` | Una fila por PDV + marca + visita, también cuando no hay presencia: Fecha, Código PDV, Marca, Presencia (Sí/No), Oferta negociada, Registrado por, Marca de tiempo, ID envío (evita duplicados si el celular reintenta). Si se negociaron varias ofertas van en la misma celda separadas por coma ("2x1, Descuento 20%"). Sin presencia queda "—"; con presencia y sin oferta, "Ninguna". |
+| `Config`    | Columna A: marcas. Columna B: ofertas. Columna C, **Con promo**: Sí/No por marca; con "No" la encuesta solo pregunta presencia para esa marca. Edítalas a mano y la encuesta se actualiza sola. |
+| `Registros` | Una fila por PDV + marca + visita, también cuando no hay presencia: Fecha, Código PDV, Marca, Presencia (Sí/No), Oferta negociada, Registrado por, Marca de tiempo, ID envío (evita duplicados si el celular reintenta). Si se negociaron varias ofertas van en la misma celda separadas por coma ("2x1, Descuento 20%"). Sin presencia queda "—"; con presencia y sin oferta, "Ninguna"; con presencia en una marca sin promo, "No aplica". |
 | `Resumen`   | Una fila por PDV y marca: visitas, visitas con presencia, % de presencia, veces con oferta negociada, cuántas veces se negoció cada oferta, última visita y su resultado ("Sin presencia", "Presente · 2x1, Descuento 20%", "Presente · sin oferta"). |
+
+Si `Config` no tiene la columna **Con promo**, el script la crea sola al cargar la encuesta: Sí para todas las
+marcas menos Nutribella y Alma de Romero.
 
 Si la hoja `Registros` todavía tiene las columnas de la versión anterior (con Unidades), el
 script la ajusta solo al cargar la encuesta: si está vacía, cambia los encabezados; si tiene
@@ -75,7 +79,7 @@ datos, la renombra a `Registros (formato anterior)` para no perderlos y crea una
 ## Registrar desde el celular (Google Forms)
 
 **PDV → Crear formulario de Google (celular)** crea un formulario con una sección por marca
-(¿hay presencia? y casillas para ¿qué ofertas negociaste?), lo enlaza a la hoja y deja un disparador que
+(¿hay presencia? y, en las marcas con promo, casillas para ¿qué ofertas negociaste?), lo enlaza a la hoja y deja un disparador que
 copia cada respuesta a `Registros` y recalcula `Resumen`. El cuadro final muestra el enlace
 para compartir con el vendedor.
 
