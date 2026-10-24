@@ -8,9 +8,9 @@ Nutribella, Alma de Romero**):
 - si **le vendió la oferta o no**,
 - **cuál oferta** fue.
 
-La encuesta (`Index.html` + `WebApp.gs`) funciona paso a paso: quién registra → PDV y fecha →
-una pantalla por marca (unidades, ¿vendió oferta?, ¿cuál?) → revisar → enviar → acumulado del
-PDV. El avance se guarda en el celular y, al enviar, las respuestas caen en la hoja `Registros`.
+La encuesta (`Index.html` + `WebApp.gs`) funciona paso a paso: código del PDV → una pantalla
+por marca (unidades, ¿vendió oferta?, ¿cuál?) → revisar → enviar → acumulado del PDV. La fecha
+se toma automáticamente. El avance se guarda en el celular y, al enviar, las respuestas caen en la hoja `Registros`.
 
 > Esta carpeta es independiente del CLI de Bancolombia; solo vive aquí para tener el
 > código versionado. No se instala con `bun`, se pega en Google Sheets.
