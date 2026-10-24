@@ -7,16 +7,14 @@
     body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 12px; color: #222; }
     h3 { margin: 0 0 10px; font-size: 15px; }
     label { display: block; font-weight: bold; margin: 10px 0 3px; }
-    input[type=text], input[type=date], input[type=number], select, textarea {
+    input[type=text], input[type=date], select {
       width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #bbb; border-radius: 4px; font-size: 13px;
     }
-    textarea { min-height: 54px; resize: vertical; }
     .marca { border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; margin-top: 10px; background: #fafafa; }
+    .marca.error { border-color: #c5221f; background: #fce8e6; }
     .marca .nombre { font-weight: bold; margin-bottom: 6px; }
-    .fila { display: flex; gap: 8px; align-items: flex-end; }
-    .fila > div { flex: 1; }
-    .fila label { margin-top: 0; font-weight: normal; font-size: 12px; color: #555; }
-    .oferta { margin-top: 6px; }
+    .marca label { margin-top: 6px; font-weight: normal; font-size: 12px; color: #555; }
+    .oferta[hidden] { display: none; }
     button { margin-top: 14px; width: 100%; padding: 9px; font-size: 14px; border: 0; border-radius: 4px;
              background: #1a73e8; color: #fff; cursor: pointer; }
     button:disabled { background: #9bbcf0; cursor: default; }
@@ -31,23 +29,27 @@
   <label for="fecha">Fecha</label>
   <input type="date" id="fecha">
 
-  <label for="pdv">PDV (punto de venta)</label>
-  <input type="text" id="pdv" list="listaPdv" placeholder="Ej. Tienda Doña Rosa" autocomplete="off">
+  <label for="pdv">Código del PDV</label>
+  <input type="text" id="pdv" list="listaPdv" placeholder="Ej. 104523" autocomplete="off">
   <datalist id="listaPdv"></datalist>
 
   <div id="marcas"></div>
-
-  <label for="obs">Observaciones</label>
-  <textarea id="obs" placeholder="Opcional"></textarea>
 
   <button id="guardar" onclick="guardar()">Guardar visita</button>
   <div id="mensaje"></div>
 
   <script>
-    var DATOS = { marcas: [], ofertas: [] };
+    var NINGUNA = 'Ninguna';
+    var DATOS = { marcas: [], ofertas: [], pdvs: [] };
 
     function idSeguro(texto) {
       return texto.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    }
+
+    function esc(texto) {
+      return String(texto).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
     }
 
     function construir(datos) {
@@ -61,36 +63,35 @@
         dl.appendChild(o);
       });
 
+      var opciones = datos.ofertas.concat([NINGUNA]).map(function (of) {
+        return '<option value="' + esc(of) + '">' + esc(of) + '</option>';
+      }).join('');
+
       var cont = document.getElementById('marcas');
       datos.marcas.forEach(function (marca) {
         var id = idSeguro(marca);
-        var opciones = datos.ofertas.map(function (of) {
-          return '<option value="' + of.replace(/"/g, '&quot;') + '">' + of + '</option>';
-        }).join('');
-
         var div = document.createElement('div');
         div.className = 'marca';
+        div.id = 'm_' + id;
         div.innerHTML =
-          '<div class="nombre">' + marca + '</div>' +
-          '<div class="fila">' +
-            '<div><label>Unidades</label><input type="number" min="0" step="1" value="0" id="u_' + id + '"></div>' +
-            '<div><label>¿Vendió oferta?</label>' +
-              '<select id="v_' + id + '" onchange="toggleOferta(\'' + id + '\')">' +
-                '<option value="No">No</option><option value="Sí">Sí</option>' +
-              '</select></div>' +
-          '</div>' +
-          '<div class="oferta"><label>¿Cuál oferta?</label>' +
-            '<select id="o_' + id + '" disabled><option value="">— Selecciona —</option>' + opciones + '</select>' +
+          '<div class="nombre">' + esc(marca) + '</div>' +
+          '<label for="p_' + id + '">¿Hay presencia?</label>' +
+          '<select id="p_' + id + '" onchange="toggleOferta(\'' + id + '\')">' +
+            '<option value="">— Responde —</option><option value="Sí">Sí</option><option value="No">No</option>' +
+          '</select>' +
+          '<div class="oferta" id="b_' + id + '" hidden>' +
+            '<label for="o_' + id + '">¿Cuál oferta negociaste?</label>' +
+            '<select id="o_' + id + '"><option value="">— Selecciona —</option>' + opciones + '</select>' +
           '</div>';
         cont.appendChild(div);
       });
     }
 
     function toggleOferta(id) {
-      var vendio = document.getElementById('v_' + id).value === 'Sí';
-      var sel = document.getElementById('o_' + id);
-      sel.disabled = !vendio;
-      if (!vendio) sel.value = '';
+      var presente = document.getElementById('p_' + id).value === 'Sí';
+      document.getElementById('b_' + id).hidden = !presente;
+      if (!presente) document.getElementById('o_' + id).value = '';
+      document.getElementById('m_' + id).classList.remove('error');
     }
 
     function mostrar(texto, tipo) {
@@ -103,27 +104,33 @@
       var boton = document.getElementById('guardar');
       var datos = {
         fecha: document.getElementById('fecha').value,
-        pdv: document.getElementById('pdv').value,
-        observaciones: document.getElementById('obs').value,
+        pdv: document.getElementById('pdv').value.trim().toUpperCase(),
         marcas: DATOS.marcas.map(function (marca) {
           var id = idSeguro(marca);
+          var respuesta = document.getElementById('p_' + id).value;
           return {
             marca: marca,
-            unidades: document.getElementById('u_' + id).value,
-            vendioOferta: document.getElementById('v_' + id).value === 'Sí',
-            oferta: document.getElementById('o_' + id).value
+            respondida: respuesta !== '',
+            presencia: respuesta === 'Sí',
+            oferta: respuesta === 'Sí' ? document.getElementById('o_' + id).value : ''
           };
         })
       };
 
-      if (!datos.pdv.trim()) { mostrar('Escribe el nombre del PDV.', 'error'); return; }
+      if (!datos.pdv) { mostrar('Escribe el código del PDV.', 'error'); return; }
       for (var i = 0; i < datos.marcas.length; i++) {
         var m = datos.marcas[i];
-        if (m.vendioOferta && !m.oferta) {
-          mostrar('Selecciona cuál oferta vendiste para ' + m.marca + '.', 'error');
+        var error = !m.respondida ? 'Responde si hay presencia de ' + m.marca + '.'
+          : (m.presencia && !m.oferta ? 'Elige la oferta negociada para ' + m.marca + ', o "' + NINGUNA + '".' : '');
+        if (error) {
+          var caja = document.getElementById('m_' + idSeguro(m.marca));
+          caja.classList.add('error');
+          caja.scrollIntoView({ block: 'center' });
+          mostrar(error, 'error');
           return;
         }
       }
+      datos.marcas.forEach(function (m) { delete m.respondida; });
 
       boton.disabled = true;
       mostrar('Guardando…', 'ok');
@@ -141,15 +148,13 @@
     }
 
     function limpiar() {
-      document.getElementById('obs').value = '';
       DATOS.marcas.forEach(function (marca) {
         var id = idSeguro(marca);
-        document.getElementById('u_' + id).value = 0;
-        document.getElementById('v_' + id).value = 'No';
+        document.getElementById('p_' + id).value = '';
         toggleOferta(id);
       });
       // Se conserva el PDV y la fecha por si se registra otra visita seguida.
-      var pdv = document.getElementById('pdv').value.trim();
+      var pdv = document.getElementById('pdv').value.trim().toUpperCase();
       if (pdv && !DATOS.pdvs.some(function (p) { return p.toLowerCase() === pdv.toLowerCase(); })) {
         DATOS.pdvs.push(pdv);
         var o = document.createElement('option');
