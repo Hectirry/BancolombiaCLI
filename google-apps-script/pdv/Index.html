@@ -147,12 +147,13 @@ var CFG = /*CFG*/{
 }/*/CFG*/;
 
 var MOCK = (typeof google === 'undefined' || !google.script || !google.script.run);
-var KEY = 'pdv_visita_v1';
+var KEY = 'pdv_visita_v2';
+var NINGUNA = 'Ninguna';
 var S = load() || fresh();
 var errs = {};
 var cache = { q: '' };
 
-function fresh(){ return { step:'pdv', vendedor:'', pdv:'', fecha:today(), i:0, ans:{}, obs:'', id:null, result:null }; }
+function fresh(){ return { step:'pdv', vendedor:'', pdv:'', fecha:today(), i:0, ans:{}, id:null, result:null }; }
 function today(){ var d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function load(){ try{ var v = localStorage.getItem(KEY); return v ? JSON.parse(v) : null; }catch(e){ return null; } }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
@@ -210,27 +211,36 @@ function remote(db){
       }).catch(function(e){ throw dbErr(e); });
     },
     apiSubmit: function(p){
-      var body = { idEnvio:p.idEnvio, vendedor:p.vendedor, pdv:p.pdv, pdvKey:pdvKey(p.pdv), fecha:p.fecha, observaciones:p.observaciones,
-        marcas: p.marcas.map(function(m){ return { marca:m.marca, unidades:Number(m.unidades)||0, vendioOferta:!!m.vendioOferta, oferta:m.vendioOferta ? m.oferta : '', nota:m.nota||'' }; }),
-        unidadesTotal: p.marcas.reduce(function(s,m){ return s + (Number(m.unidades)||0); }, 0),
+      var body = { idEnvio:p.idEnvio, vendedor:p.vendedor, pdv:p.pdv, pdvKey:pdvKey(p.pdv), fecha:p.fecha,
+        marcas: p.marcas.map(function(m){ return { marca:m.marca, presencia:!!m.presencia, oferta:m.presencia ? m.oferta : '' }; }),
         creado: new Date().toISOString() };
       return col.doc(p.idEnvio).set(body).then(function(){ return remote(db).apiResumenPDV(p.pdv); }, function(e){ throw dbErr(e); });
     },
     apiResumenPDV: function(pdv){
       return col.where('pdvKey','==',pdvKey(pdv)).limit(1000).get().then(function(snap){
-        var g = {};
+        var regs = [];
         snap.docs.forEach(function(d){
-          (d.data().marcas || []).forEach(function(m){
-            if (!(m.unidades > 0 || m.vendioOferta)) return;
-            var k = m.marca; if (!g[k]) g[k] = { marca:k, visitas:0, unidades:0, conOferta:0, ofertas:{} };
-            g[k].visitas++; g[k].unidades += Number(m.unidades)||0;
-            if (m.vendioOferta){ var o = m.oferta || '(sin especificar)'; g[k].conOferta++; g[k].ofertas[o] = (g[k].ofertas[o]||0)+1; }
-          });
+          (d.data().marcas || []).forEach(function(m){ regs.push({ id:d.id, marca:m.marca, presencia:!!m.presencia, oferta:m.oferta }); });
         });
-        return { pdv: pdv, visitas: snap.size, marcas: CFG.marcas.map(function(m){ return g[m] || { marca:m, visitas:0, unidades:0, conOferta:0, ofertas:{} }; }) };
+        return acumulado(pdv, regs);
       }).catch(function(e){ throw dbErr(e); });
     }
   };
+}
+
+/* Acumulado por marca (igual que apiResumenPDV en Code.gs). */
+function acumulado(pdv, regs){
+  var g = {}, visitas = {};
+  regs.forEach(function(r){
+    visitas[r.id] = 1;
+    var k = r.marca; if (!g[k]) g[k] = { marca:k, visitas:0, presencia:0, conOferta:0, ofertas:{} };
+    g[k].visitas++;
+    if (r.presencia){
+      g[k].presencia++;
+      if (r.oferta && r.oferta !== NINGUNA){ g[k].conOferta++; g[k].ofertas[r.oferta] = (g[k].ofertas[r.oferta]||0)+1; }
+    }
+  });
+  return { pdv: pdv, visitas: Object.keys(visitas).length, marcas: CFG.marcas.map(function(m){ return g[m] || { marca:m, visitas:0, presencia:0, conOferta:0, ofertas:{} }; }) };
 }
 
 /* Simulación para la vista previa: guarda en este navegador y calcula el acumulado igual que el servidor. */
@@ -246,8 +256,7 @@ var mock = {
     var rows = mock._rows();
     if (!rows.some(function(r){ return r.id === p.idEnvio; })) {
       p.marcas.forEach(function(m){
-        if (!(m.unidades > 0 || m.vendioOferta)) return;
-        rows.push({ id:p.idEnvio, fecha:p.fecha, pdv:p.pdv, marca:m.marca, unidades:Number(m.unidades)||0, vendio:!!m.vendioOferta, oferta: m.vendioOferta ? m.oferta : '—' });
+        rows.push({ id:p.idEnvio, fecha:p.fecha, pdv:p.pdv, marca:m.marca, presencia:!!m.presencia, oferta: m.presencia ? m.oferta : '—' });
       });
       mock._save(rows);
     }
@@ -255,14 +264,7 @@ var mock = {
   },
   apiResumenPDV: function(pdv){
     var regs = mock._rows().filter(function(r){ return r.pdv.toLowerCase() === String(pdv).toLowerCase(); });
-    var g = {};
-    regs.forEach(function(r){
-      var k = r.marca; if (!g[k]) g[k] = { marca:r.marca, visitas:0, unidades:0, conOferta:0, ofertas:{} };
-      g[k].visitas++; g[k].unidades += r.unidades;
-      if (r.vendio){ g[k].conOferta++; g[k].ofertas[r.oferta] = (g[k].ofertas[r.oferta]||0)+1; }
-    });
-    var visitas = {}; regs.forEach(function(r){ visitas[r.id] = 1; });
-    return { pdv: pdv, visitas: Object.keys(visitas).length, marcas: CFG.marcas.map(function(m){ return g[m] || { marca:m, visitas:0, unidades:0, conOferta:0, ofertas:{} }; }) };
+    return acumulado(pdv, regs);
   }
 };
 
@@ -313,73 +315,64 @@ function vPdv(){
 function vMarca(){
   var m = CFG.marcas[S.i], a = A(m);
   var h = '<h2>'+esc(m)+'</h2><p class="sub">PDV '+esc(S.pdv)+'</p>';
-  var inner = '<p class="q">¿Cuántas unidades vendiste de '+esc(m)+'?</p><p class="hint">Si no vendiste ninguna, deja 0.</p>'+
-    '<div class="stepper"><button type="button" data-step="-1" aria-label="Menos">−</button>'+
-    '<input class="field" id="unid" type="number" inputmode="numeric" min="0" step="1" value="'+esc(a.unidades == null ? 0 : a.unidades)+'">'+
-    '<button type="button" data-step="1" aria-label="Más">+</button></div>'+msg('unidades');
-  h += blk(['unidades'], inner);
-  inner = '<p class="q">¿Le vendiste la oferta de '+esc(m)+'?</p>'+choice('vendio', m, YN)+msg('vendio');
-  if (a.vendio === 'Sí'){
-    inner += '<p class="q">¿Cuál oferta fue?</p>'+choice('oferta', m, CFG.ofertas.concat(['Otra']), 'col')+msg('oferta');
+  var inner = '<p class="q">¿Hay presencia de '+esc(m)+' en el PDV?</p>'+choice('presencia', m, YN)+msg('presencia');
+  if (a.presencia === 'Sí'){
+    inner += '<p class="q">¿Cuál oferta negociaste?</p>'+choice('oferta', m, CFG.ofertas.concat(['Otra', NINGUNA]), 'col')+msg('oferta');
     if (a.oferta === 'Otra') inner += '<label class="lbl" for="otra" style="margin-top:10px">Describe la oferta</label><input class="field" id="otra" placeholder="Ej. Descuento 15% en combo" value="'+esc(a.otra||'')+'">'+msg('otra');
   }
-  h += blk(['vendio','oferta','otra'], inner);
-  h += '<div class="block"><label class="lbl" for="nota">Comentario sobre '+esc(m)+' (opcional)</label><textarea class="field" id="nota" placeholder="Ej. Pidió más surtido de 400 ml">'+esc(a.nota||'')+'</textarea></div>';
+  h += blk(['presencia','oferta','otra'], inner);
   app(h);
   var last = S.i === CFG.marcas.length-1;
   nav([{label: S.i===0 ? 'Código' : 'Anterior', act:'prev', ghost:true},{label: last ? 'Revisar y enviar' : 'Siguiente', act:'next'}]);
-  var u = document.getElementById('unid'); u.addEventListener('input', function(){ a.unidades = u.value; save(); });
   var o = document.getElementById('otra'); if (o) o.addEventListener('input', function(){ a.otra = o.value; save(); });
-  var n = document.getElementById('nota'); n.addEventListener('input', function(){ a.nota = n.value; save(); });
 }
 
 function validateMarca(m){
   var a = A(m), e = {};
-  var u = num(a.unidades == null ? 0 : a.unidades);
-  if (u == null || u < 0 || u % 1) e.unidades = 'Escribe un número entero de unidades. Si no vendiste, deja 0.';
-  if (!a.vendio) e.vendio = 'Responde si le vendiste la oferta.';
-  if (a.vendio === 'Sí' && !a.oferta) e.oferta = 'Elige cuál oferta fue.';
-  if (a.vendio === 'Sí' && a.oferta === 'Otra' && !(a.otra||'').trim()) e.otra = 'Describe la oferta.';
+  if (!a.presencia) e.presencia = 'Responde si hay presencia de la marca.';
+  if (a.presencia === 'Sí' && !a.oferta) e.oferta = 'Elige la oferta negociada, o "'+NINGUNA+'".';
+  if (a.presencia === 'Sí' && a.oferta === 'Otra' && !(a.otra||'').trim()) e.otra = 'Describe la oferta.';
   return e;
 }
-function ofertaDe(a){ return a.vendio === 'Sí' ? (a.oferta === 'Otra' ? (a.otra||'').trim() : a.oferta) : ''; }
+function ofertaDe(a){ return a.presencia === 'Sí' ? (a.oferta === 'Otra' ? (a.otra||'').trim() : a.oferta) : ''; }
 
 function vReview(){
   var h = '<h2>Revisar y enviar</h2><p class="sub">PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p>';
-  var tot = 0, conOf = 0;
+  var conPres = 0, conOf = 0;
   CFG.marcas.forEach(function(m, i){
-    var a = A(m), u = num(a.unidades)||0, of = ofertaDe(a); tot += u; if (of) conOf++;
-    h += '<div class="block brandcard '+(of?'ok':(u?'':'off'))+'"><div class="n">'+(i+1)+'</div><div><h3>'+esc(m)+'</h3>'+
-      '<p class="meta">'+u+' unidad'+(u===1?'':'es')+(a.nota?' · '+esc(a.nota):'')+'</p>'+
-      (of ? '<span class="pill yes">Oferta: '+esc(of)+'</span>' : '<span class="pill no">Sin oferta</span>')+
+    var a = A(m), pres = a.presencia === 'Sí', of = ofertaDe(a);
+    if (pres) conPres++;
+    if (of && of !== NINGUNA) conOf++;
+    var pill = !pres ? '<span class="pill no">Sin presencia</span>'
+      : (of && of !== NINGUNA ? '<span class="pill yes">Oferta: '+esc(of)+'</span>' : '<span class="pill yes">Presente · sin oferta</span>');
+    h += '<div class="block brandcard '+(pres?'ok':'off')+'"><div class="n">'+(i+1)+'</div><div><h3>'+esc(m)+'</h3>'+
+      '<p class="meta">'+(pres ? 'Con presencia' : 'Sin presencia')+'</p>'+pill+
       '<div><button class="link" data-goto="'+i+'">Editar</button></div></div></div>';
   });
-  h += '<div class="block"><label class="lbl" for="obs">Observaciones (opcional)</label><textarea class="field" id="obs" placeholder="Ej. El dueño pide visita el próximo martes">'+esc(S.obs||'')+'</textarea></div>';
-  h += '<div class="block"><p style="margin:0"><b>'+tot+' unidades</b> en total y oferta vendida en <b>'+conOf+' de '+CFG.marcas.length+'</b> marcas. Después de enviar ya no podrás editar esta visita.</p></div><div id="sendmsg"></div>';
+  h += '<div class="block"><p style="margin:0">Presencia en <b>'+conPres+' de '+CFG.marcas.length+'</b> marcas y oferta negociada en <b>'+conOf+'</b>. Después de enviar ya no podrás editar esta visita.</p></div><div id="sendmsg"></div>';
   app(h);
   nav([{label:'Anterior', act:'backToMarca', ghost:true},{label:'Enviar visita', act:'send'}]);
-  var o = document.getElementById('obs'); o.addEventListener('input', function(){ S.obs = o.value; save(); });
 }
 
 function buildPayload(){
   if (!S.id) { S.id = uuid(); save(); }
-  return { idEnvio:S.id, vendedor:'', pdv:S.pdv.trim(), fecha:S.fecha, observaciones:(S.obs||'').trim(),
-    marcas: CFG.marcas.map(function(m){ var a = A(m); return { marca:m, unidades:num(a.unidades)||0, vendioOferta:a.vendio==='Sí', oferta:ofertaDe(a), nota:(a.nota||'').trim() }; }) };
+  return { idEnvio:S.id, vendedor:'', pdv:S.pdv.trim(), fecha:S.fecha,
+    marcas: CFG.marcas.map(function(m){ var a = A(m); return { marca:m, presencia:a.presencia==='Sí', oferta:ofertaDe(a) }; }) };
 }
 
 function vResult(){
-  var r = S.result, max = 1;
+  var r = S.result;
   if (!r || !r.marcas){ go('pdv'); return; }
-  r.marcas.forEach(function(x){ max = Math.max(max, x.unidades); });
-  var unidHoy = CFG.marcas.reduce(function(s,m){ return s + (num(A(m).unidades)||0); }, 0);
+  var presHoy = CFG.marcas.filter(function(m){ return A(m).presencia === 'Sí'; }).length;
   var h = '<div class="hero-score"><div class="eyebrow" style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.8">Visita guardada</div>'+
-    '<div class="big">'+unidHoy+'<small> unidades hoy</small></div><p>PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p></div>';
+    '<div class="big">'+presHoy+'<small> de '+CFG.marcas.length+' marcas con presencia</small></div><p>PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p></div>';
   h += '<h2>Acumulado en este PDV</h2><p class="sub">'+r.visitas+' visita'+(r.visitas===1?'':'s')+' registrada'+(r.visitas===1?'':'s')+' en total.</p><div class="block"><ul class="shelf">';
   r.marcas.forEach(function(x){
     var ofs = Object.keys(x.ofertas).sort(function(a,b){ return x.ofertas[b]-x.ofertas[a]; }).map(function(k){ return esc(k)+' ×'+x.ofertas[k]; });
-    h += '<li><div class="top-row"><span>'+esc(x.marca)+'</span><span>'+x.unidades+' unid</span></div>'+
-      '<div class="meter"><i style="width:'+Math.max(2, Math.round(x.unidades/max*100))+'%"></i></div>'+
-      '<div class="comp"><span>Oferta vendida '+x.conOferta+' de '+x.visitas+'</span>'+(ofs.length?'<span>'+ofs.join(' · ')+'</span>':'')+'</div></li>';
+    var pct = x.visitas ? Math.round(x.presencia/x.visitas*100) : 0;
+    h += '<li><div class="top-row"><span>'+esc(x.marca)+'</span><span>Presencia '+x.presencia+' de '+x.visitas+'</span></div>'+
+      '<div class="meter"><i style="width:'+Math.max(2, pct)+'%"></i></div>'+
+      '<div class="comp"><span>Oferta negociada '+x.conOferta+' de '+x.visitas+'</span>'+(ofs.length?'<span>'+ofs.join(' · ')+'</span>':'')+'</div></li>';
   });
   h += '</ul></div>';
   app(h);
@@ -389,8 +382,7 @@ function vResult(){
 /* ---------- Eventos ---------- */
 document.addEventListener('click', function(ev){
   var t = ev.target.closest('button,[data-act]'); if (!t) return;
-  if (t.dataset.m){ var a = A(t.dataset.m); a[t.dataset.k] = t.dataset.v; if (t.dataset.k==='vendio' && t.dataset.v==='No'){ delete a.oferta; delete a.otra; } delete errs[t.dataset.k]; save(); var y = window.scrollY; render(); window.scrollTo(0,y); return; }
-  if (t.dataset.step){ var m = CFG.marcas[S.i], x = A(m), u = num(x.unidades)||0; u = Math.max(0, u + Number(t.dataset.step)); x.unidades = u; save(); document.getElementById('unid').value = u; return; }
+  if (t.dataset.m){ var a = A(t.dataset.m); a[t.dataset.k] = t.dataset.v; if (t.dataset.k==='presencia' && t.dataset.v==='No'){ delete a.oferta; delete a.otra; } delete errs[t.dataset.k]; save(); var y = window.scrollY; render(); window.scrollTo(0,y); return; }
   if (t.dataset.pick != null){ S.pdv = t.dataset.pick; save(); render(); return; }
   if (t.dataset.goto != null){ S.i = Number(t.dataset.goto); go('marca'); return; }
   var act = t.dataset.act; if (act && ACT[act]) ACT[act](t);

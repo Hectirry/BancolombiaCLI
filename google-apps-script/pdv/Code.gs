@@ -3,9 +3,8 @@
  *
  * Qué registra por cada PDV y marca:
  *   - Marca (Savital, Dove, Sedal, Nutribella, Alma de Romero)
- *   - Unidades
- *   - Si le vendió la oferta o no
- *   - Cuál oferta fue
+ *   - Si hay presencia de la marca o no
+ *   - Si hay presencia: cuál oferta se negoció ("Ninguna" si no se negoció)
  *
  * Instalación: abre una hoja de cálculo de Google → Extensiones → Apps Script,
  * pega este archivo como Code.gs y Sidebar.html como archivo HTML, guarda y
@@ -31,10 +30,8 @@ var CONFIG = {
     'Fecha',
     'Código PDV',
     'Marca',
-    'Unidades',
-    'Vendió oferta',
-    'Oferta',
-    'Observaciones',
+    'Presencia',
+    'Oferta negociada',
     'Registrado por',
     'Marca de tiempo',
     'ID envío'
@@ -45,17 +42,71 @@ var CONFIG = {
     FECHA: 1,
     PDV: 2,
     MARCA: 3,
-    UNIDADES: 4,
-    VENDIO: 5,
-    OFERTA: 6,
-    OBS: 7,
-    USUARIO: 8,
-    TIMESTAMP: 9,
-    ID: 10
+    PRESENCIA: 4,
+    OFERTA: 5,
+    USUARIO: 6,
+    TIMESTAMP: 7,
+    ID: 8
   },
 
-  SIN_OFERTA: '—'
+  // Oferta cuando la marca no tiene presencia.
+  SIN_OFERTA: '—',
+  // Oferta cuando hay presencia pero no se negoció ninguna.
+  NINGUNA: 'Ninguna'
 };
+
+/** true si el texto es "Sí"/"Si" (sin importar mayúsculas). */
+function esSi(v) {
+  var t = String(v == null ? '' : v).trim().toLowerCase();
+  return t === 'sí' || t === 'si' || v === true;
+}
+
+// Se pone en true cuando prepararRegistros() crea o limpia la hoja.
+var REGISTROS_RECREADOS = false;
+
+/**
+ * Deja la hoja Registros con los encabezados actuales. Si tiene el formato
+ * anterior (con Unidades) y ya tiene datos, la renombra para no perderlos y
+ * crea una hoja Registros nueva.
+ * @return {GoogleAppsScript.Spreadsheet.Sheet}
+ */
+function prepararRegistros() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName(CONFIG.HOJA_REGISTROS);
+  var n = CONFIG.ENCABEZADOS.length;
+
+  if (hoja && hoja.getLastRow() > 0) {
+    var actuales = hoja.getRange(1, 1, 1, Math.max(hoja.getLastColumn(), n)).getValues()[0]
+      .map(function (v) { return String(v).trim(); });
+    var iguales = CONFIG.ENCABEZADOS.every(function (h, i) { return actuales[i] === h; }) &&
+      actuales.slice(n).every(function (v) { return v === ''; });
+    if (iguales) return hoja;
+
+    if (hoja.getLastRow() > 1) {
+      // Formato anterior con datos: se conserva aparte.
+      var nombre = CONFIG.HOJA_REGISTROS + ' (formato anterior)';
+      var k = 2;
+      while (ss.getSheetByName(nombre)) nombre = CONFIG.HOJA_REGISTROS + ' (formato anterior ' + (k++) + ')';
+      hoja.setName(nombre);
+      hoja = null;
+    } else {
+      // Solo encabezados viejos: se limpia la hoja.
+      hoja.clear();
+      hoja.getRange(1, 1, hoja.getMaxRows(), hoja.getMaxColumns()).clearDataValidations();
+    }
+  }
+
+  if (!hoja) hoja = ss.insertSheet(CONFIG.HOJA_REGISTROS);
+  REGISTROS_RECREADOS = true;
+  hoja.getRange(1, 1, 1, n)
+    .setValues([CONFIG.ENCABEZADOS])
+    .setFontWeight('bold')
+    .setBackground('#efefef');
+  hoja.setFrozenRows(1);
+  hoja.setColumnWidth(CONFIG.COL.PDV, 160);
+  hoja.setColumnWidth(CONFIG.COL.OFERTA, 240);
+  return hoja;
+}
 
 // ---------------------------------------------------------------------------
 // Menú
@@ -95,22 +146,7 @@ function configurarHojas() {
   }
 
   // Hoja Registros: una fila por PDV + marca + visita.
-  var registros = ss.getSheetByName(CONFIG.HOJA_REGISTROS);
-  if (!registros) {
-    registros = ss.insertSheet(CONFIG.HOJA_REGISTROS);
-  }
-  if (registros.getLastRow() === 0) {
-    registros.getRange(1, 1, 1, CONFIG.ENCABEZADOS.length)
-      .setValues([CONFIG.ENCABEZADOS])
-      .setFontWeight('bold')
-      .setBackground('#efefef');
-    registros.setFrozenRows(1);
-    registros.setColumnWidth(CONFIG.COL.PDV, 200);
-    registros.setColumnWidth(CONFIG.COL.OFERTA, 240);
-    registros.setColumnWidth(CONFIG.COL.OBS, 300);
-    registros.getRange(2, CONFIG.COL.FECHA, registros.getMaxRows() - 1, 1).setNumberFormat('yyyy-mm-dd');
-    registros.getRange(2, CONFIG.COL.TIMESTAMP, registros.getMaxRows() - 1, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss');
-  }
+  var registros = prepararRegistros();
   aplicarValidaciones();
 
   // Hoja Resumen.
@@ -125,7 +161,7 @@ function configurarHojas() {
 }
 
 /**
- * Listas desplegables en Registros: Marca, Vendió oferta y Oferta.
+ * Listas desplegables en Registros: Marca, Presencia y Oferta negociada.
  * Se vuelve a ejecutar cada vez que se guarda una visita, para que los cambios
  * en la hoja Config se reflejen sin hacer nada más.
  */
@@ -136,19 +172,17 @@ function aplicarValidaciones() {
 
   var filas = Math.max(registros.getMaxRows() - 1, 1);
   var marcas = leerLista('marcas');
-  var ofertas = leerLista('ofertas').concat([CONFIG.SIN_OFERTA]);
+  var ofertas = leerLista('ofertas').concat([CONFIG.NINGUNA, CONFIG.SIN_OFERTA]);
 
   registros.getRange(2, CONFIG.COL.MARCA, filas, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(marcas, true).setAllowInvalid(false).build()
   );
-  registros.getRange(2, CONFIG.COL.VENDIO, filas, 1).setDataValidation(
+  registros.getRange(2, CONFIG.COL.PRESENCIA, filas, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(['Sí', 'No'], true).setAllowInvalid(false).build()
   );
+  // "Otra" oferta escrita a mano también se acepta.
   registros.getRange(2, CONFIG.COL.OFERTA, filas, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(ofertas, true).setAllowInvalid(true).build()
-  );
-  registros.getRange(2, CONFIG.COL.UNIDADES, filas, 1).setDataValidation(
-    SpreadsheetApp.newDataValidation().requireNumberGreaterThanOrEqualTo(0).setAllowInvalid(false).build()
   );
 }
 
@@ -216,54 +250,50 @@ function listarPDVs() {
  * Guarda una visita completa (varias marcas) como filas en Registros.
  * La usan la barra lateral (guardarVisita) y la web app (apiSubmit).
  *
- * @param {{fecha: string, pdv: string, observaciones: string, vendedor: string, idEnvio: string,
- *          marcas: {marca: string, unidades: number|string, vendioOferta: boolean, oferta: string, nota: string}[]}} datos
- * @return {{pdv: string, filas: number, conOferta: number, duplicado: boolean}}
+ * Se guarda una fila por cada marca, tenga presencia o no.
+ *
+ * @param {{fecha: string, pdv: string, vendedor: string, idEnvio: string,
+ *          marcas: {marca: string, presencia: boolean|string, oferta: string}[]}} datos
+ * @return {{pdv: string, filas: number, conPresencia: number, conOferta: number, duplicado: boolean}}
  */
 function registrarVisita(datos) {
   if (!datos || !datos.pdv || !String(datos.pdv).trim()) {
-    throw new Error('Debes indicar el nombre del PDV.');
+    throw new Error('Debes indicar el código del PDV.');
   }
   var pdv = String(datos.pdv).trim();
   var fecha = datos.fecha ? new Date(datos.fecha + 'T00:00:00') : new Date();
   if (isNaN(fecha.getTime())) throw new Error('La fecha no es válida.');
 
-  var registros = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.HOJA_REGISTROS);
-  if (!registros) throw new Error('No existe la hoja Registros. Ejecuta PDV → Configurar hojas.');
+  var registros = prepararRegistros();
 
   // Reintentos desde el celular: si este envío ya está guardado, no se duplica.
   var idEnvio = String(datos.idEnvio || '').trim();
   if (idEnvio && registros.getLastRow() > 1) {
     var ids = registros.getRange(2, CONFIG.COL.ID, registros.getLastRow() - 1, 1).getValues();
     var yaExiste = ids.some(function (f) { return String(f[0]) === idEnvio; });
-    if (yaExiste) return { pdv: pdv, filas: 0, conOferta: 0, duplicado: true };
+    if (yaExiste) return { pdv: pdv, filas: 0, conPresencia: 0, conOferta: 0, duplicado: true };
   }
 
   var filas = [];
   var usuario = String(datos.vendedor || '').trim() || Session.getActiveUser().getEmail() || '';
   var ahora = new Date();
-  var observaciones = String(datos.observaciones || '').trim();
+  var conPresencia = 0;
+  var conOferta = 0;
 
   (datos.marcas || []).forEach(function (m) {
-    var unidades = Number(m.unidades);
-    if (!m.marca) return;
-    if (isNaN(unidades) || unidades < 0) {
-      throw new Error('Unidades inválidas para ' + m.marca + '.');
+    if (!m || !m.marca) return;
+    var presencia = esSi(m.presencia);
+    var oferta = presencia ? String(m.oferta || '').trim() : CONFIG.SIN_OFERTA;
+    if (presencia && !oferta) {
+      throw new Error('Indica la oferta negociada para ' + m.marca + ' (o "' + CONFIG.NINGUNA + '").');
     }
-    var vendio = !!m.vendioOferta;
-    var oferta = vendio ? String(m.oferta || '').trim() : CONFIG.SIN_OFERTA;
-    if (vendio && !oferta) {
-      throw new Error('Indica cuál oferta vendiste para ' + m.marca + '.');
-    }
-    // Solo se guardan marcas con algo que reportar.
-    if (unidades === 0 && !vendio) return;
-
-    var obs = [String(m.nota || '').trim(), observaciones].filter(Boolean).join(' | ');
-    filas.push([fecha, pdv, m.marca, unidades, vendio ? 'Sí' : 'No', oferta, obs, usuario, ahora, idEnvio]);
+    if (presencia) conPresencia++;
+    if (presencia && oferta !== CONFIG.NINGUNA) conOferta++;
+    filas.push([fecha, pdv, m.marca, presencia ? 'Sí' : 'No', oferta, usuario, ahora, idEnvio]);
   });
 
   if (!filas.length) {
-    throw new Error('No hay nada que guardar: todas las marcas tienen 0 unidades y sin oferta.');
+    throw new Error('No hay marcas para guardar.');
   }
 
   var inicio = registros.getLastRow() + 1;
@@ -273,15 +303,15 @@ function registrarVisita(datos) {
   aplicarValidaciones();
   generarResumen();
 
-  var conOferta = filas.filter(function (f) { return f[CONFIG.COL.VENDIO - 1] === 'Sí'; }).length;
-  return { pdv: pdv, filas: filas.length, conOferta: conOferta, duplicado: false };
+  return { pdv: pdv, filas: filas.length, conPresencia: conPresencia, conOferta: conOferta, duplicado: false };
 }
 
 /** Versión para la barra lateral: devuelve un mensaje de texto. */
 function guardarVisita(datos) {
   var r = registrarVisita(datos);
   if (r.duplicado) return 'Esta visita ya estaba guardada.';
-  return 'Guardado: ' + r.filas + ' marca(s) para "' + r.pdv + '" (' + r.conOferta + ' con oferta).';
+  return 'Guardado PDV "' + r.pdv + '": presencia en ' + r.conPresencia + ' de ' + r.filas +
+    ' marca(s), oferta negociada en ' + r.conOferta + '.';
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +319,7 @@ function guardarVisita(datos) {
 // ---------------------------------------------------------------------------
 
 /**
- * Mantiene coherencia entre "Vendió oferta" y "Oferta" cuando se edita a mano.
+ * Mantiene coherencia entre "Presencia" y "Oferta negociada" cuando se edita a mano.
  * Trigger simple: se ejecuta solo con este archivo instalado en la hoja.
  */
 function onEdit(e) {
@@ -300,23 +330,23 @@ function onEdit(e) {
   var col = e.range.getColumn();
   var fila = e.range.getRow();
 
-  if (col === CONFIG.COL.VENDIO) {
+  if (col === CONFIG.COL.PRESENCIA) {
     var valor = String(e.value || '').trim();
+    var oferta = hoja.getRange(fila, CONFIG.COL.OFERTA);
     if (valor === 'No') {
-      hoja.getRange(fila, CONFIG.COL.OFERTA).setValue(CONFIG.SIN_OFERTA);
-    } else if (valor === 'Sí') {
-      var oferta = hoja.getRange(fila, CONFIG.COL.OFERTA);
-      if (String(oferta.getValue()) === CONFIG.SIN_OFERTA) oferta.clearContent();
+      oferta.setValue(CONFIG.SIN_OFERTA);
+    } else if (valor === 'Sí' && String(oferta.getValue()) === CONFIG.SIN_OFERTA) {
+      oferta.setValue(CONFIG.NINGUNA);
     }
   } else if (col === CONFIG.COL.OFERTA) {
     var ofertaValor = String(e.value || '').trim();
-    var celdaVendio = hoja.getRange(fila, CONFIG.COL.VENDIO);
-    if (ofertaValor && ofertaValor !== CONFIG.SIN_OFERTA && celdaVendio.getValue() !== 'Sí') {
-      celdaVendio.setValue('Sí');
+    var celdaPresencia = hoja.getRange(fila, CONFIG.COL.PRESENCIA);
+    if (ofertaValor && ofertaValor !== CONFIG.SIN_OFERTA && celdaPresencia.getValue() !== 'Sí') {
+      celdaPresencia.setValue('Sí');
     }
   }
 
-  if (col === CONFIG.COL.VENDIO || col === CONFIG.COL.OFERTA || col === CONFIG.COL.UNIDADES) {
+  if (col === CONFIG.COL.PRESENCIA || col === CONFIG.COL.OFERTA) {
     // Marca de tiempo de la última modificación de la fila.
     hoja.getRange(fila, CONFIG.COL.TIMESTAMP).setValue(new Date()).setNumberFormat('yyyy-mm-dd hh:mm:ss');
   }
@@ -328,7 +358,7 @@ function onEdit(e) {
 
 /**
  * Devuelve los registros como objetos.
- * @return {{fecha: Date, pdv: string, marca: string, unidades: number, vendio: boolean, oferta: string, obs: string, id: string}[]}
+ * @return {{fecha: Date, pdv: string, marca: string, presencia: boolean, oferta: string, id: string}[]}
  */
 function leerRegistros() {
   var registros = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.HOJA_REGISTROS);
@@ -343,13 +373,16 @@ function leerRegistros() {
         fecha: fecha instanceof Date ? fecha : (fecha ? new Date(fecha) : null),
         pdv: String(f[C.PDV - 1]).trim(),
         marca: String(f[C.MARCA - 1]).trim(),
-        unidades: Number(f[C.UNIDADES - 1]) || 0,
-        vendio: String(f[C.VENDIO - 1]).trim().toLowerCase() === 'sí' || String(f[C.VENDIO - 1]).trim().toLowerCase() === 'si',
+        presencia: esSi(f[C.PRESENCIA - 1]),
         oferta: String(f[C.OFERTA - 1]).trim(),
-        obs: String(f[C.OBS - 1]).trim(),
         id: String(f[C.ID - 1] || '').trim()
       };
     });
+}
+
+/** true si el registro tiene presencia y una oferta negociada real. */
+function tieneOferta(r) {
+  return r.presencia && !!r.oferta && r.oferta !== CONFIG.NINGUNA && r.oferta !== CONFIG.SIN_OFERTA;
 }
 
 /**
@@ -367,24 +400,24 @@ function calcularResumen(registros) {
         pdv: r.pdv,
         marca: r.marca,
         visitas: 0,
-        unidades: 0,
+        presencia: 0,
         conOferta: 0,
         ofertas: {},
         ultimaVisita: null,
-        ultimaOferta: ''
+        ultimoResultado: ''
       };
     }
     var g = grupos[clave];
     g.visitas += 1;
-    g.unidades += r.unidades;
-    if (r.vendio) {
+    if (r.presencia) g.presencia += 1;
+    if (tieneOferta(r)) {
       g.conOferta += 1;
-      var nombre = r.oferta && r.oferta !== CONFIG.SIN_OFERTA ? r.oferta : '(sin especificar)';
-      g.ofertas[nombre] = (g.ofertas[nombre] || 0) + 1;
+      g.ofertas[r.oferta] = (g.ofertas[r.oferta] || 0) + 1;
     }
-    if (r.fecha && (!g.ultimaVisita || r.fecha > g.ultimaVisita)) {
+    if (r.fecha && (!g.ultimaVisita || r.fecha >= g.ultimaVisita)) {
       g.ultimaVisita = r.fecha;
-      g.ultimaOferta = r.vendio ? (r.oferta || '(sin especificar)') : 'No vendió';
+      g.ultimoResultado = !r.presencia ? 'Sin presencia'
+        : (tieneOferta(r) ? 'Presente · ' + r.oferta : 'Presente · sin oferta');
     }
   });
 
@@ -414,8 +447,8 @@ function generarResumen() {
   hoja.clear();
 
   var encabezados = [
-    'PDV', 'Marca', 'Visitas', 'Unidades totales', 'Veces vendió oferta',
-    '% visitas con oferta', 'Ofertas vendidas (veces)', 'Última visita', 'Resultado última visita'
+    'PDV', 'Marca', 'Visitas', 'Visitas con presencia', '% presencia',
+    'Veces con oferta negociada', 'Ofertas negociadas (veces)', 'Última visita', 'Resultado última visita'
   ];
   hoja.getRange(1, 1, 1, encabezados.length).setValues([encabezados]).setFontWeight('bold').setBackground('#efefef');
   hoja.setFrozenRows(1);
@@ -431,16 +464,19 @@ function generarResumen() {
       g.pdv,
       g.marca,
       g.visitas,
-      g.unidades,
+      g.presencia,
+      g.visitas ? g.presencia / g.visitas : 0,
       g.conOferta,
-      g.visitas ? g.conOferta / g.visitas : 0,
       formatearOfertas(g.ofertas) || '—',
       g.ultimaVisita || '',
-      g.ultimaOferta
+      g.ultimoResultado
     ];
   });
   hoja.getRange(2, 1, filas.length, encabezados.length).setValues(filas);
-  hoja.getRange(2, 6, filas.length, 1).setNumberFormat('0%');
+  // Formatos explícitos: la hoja puede traer formatos de una versión anterior.
+  hoja.getRange(2, 3, filas.length, 2).setNumberFormat('0');
+  hoja.getRange(2, 5, filas.length, 1).setNumberFormat('0%');
+  hoja.getRange(2, 6, filas.length, 1).setNumberFormat('0');
   hoja.getRange(2, 8, filas.length, 1).setNumberFormat('yyyy-mm-dd');
   hoja.setColumnWidth(1, 200);
   hoja.setColumnWidth(7, 320);
@@ -463,8 +499,8 @@ function consultarPDV() {
 
   var resumen = calcularResumen(registros);
   var lineas = resumen.map(function (g) {
-    return g.pdv + ' · ' + g.marca + ': ' + g.unidades + ' unidades en ' + g.visitas + ' visita(s); ' +
-      'vendió oferta ' + g.conOferta + ' vez/veces' +
+    return g.pdv + ' · ' + g.marca + ': presencia en ' + g.presencia + ' de ' + g.visitas + ' visita(s); ' +
+      'oferta negociada ' + g.conOferta + ' vez/veces' +
       (g.conOferta ? ' [' + formatearOfertas(g.ofertas) + ']' : '') + '.';
   });
   ui.alert('Detalle del PDV', lineas.join('\n'), ui.ButtonSet.OK);
@@ -486,26 +522,23 @@ function crearFormularioGoogle() {
   var ofertas = leerLista('ofertas');
 
   var form = FormApp.create('Visita PDV — ' + ss.getName());
-  form.setDescription('Registra por cada marca las unidades, si vendiste la oferta y cuál fue.');
+  form.setDescription('Registra por cada marca si hay presencia y, si la hay, cuál oferta negociaste.');
   form.setCollectEmail(false);
 
   form.addDateItem().setTitle('Fecha de la visita').setRequired(true);
-  form.addTextItem().setTitle('PDV').setHelpText('Nombre del punto de venta').setRequired(true);
+  form.addTextItem().setTitle('PDV').setHelpText('Código del punto de venta').setRequired(true);
 
   marcas.forEach(function (marca) {
     form.addSectionHeaderItem().setTitle(marca);
-    form.addTextItem()
-      .setTitle(marca + ' - Unidades')
-      .setValidation(FormApp.createTextValidation().requireNumberGreaterThanOrEqualTo(0).build());
     form.addMultipleChoiceItem()
-      .setTitle(marca + ' - ¿Vendió oferta?')
-      .setChoiceValues(['Sí', 'No']);
+      .setTitle(marca + ' - ¿Hay presencia?')
+      .setChoiceValues(['Sí', 'No'])
+      .setRequired(true);
     form.addListItem()
-      .setTitle(marca + ' - ¿Cuál oferta?')
-      .setChoiceValues(ofertas);
+      .setTitle(marca + ' - ¿Cuál oferta negociaste?')
+      .setHelpText('Solo si hay presencia.')
+      .setChoiceValues(ofertas.concat([CONFIG.NINGUNA]));
   });
-
-  form.addParagraphTextItem().setTitle('Observaciones');
 
   form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
 
@@ -547,14 +580,12 @@ function procesarRespuestaFormulario(e) {
   if (isNaN(fecha.getTime())) fecha = new Date();
 
   var marcasVisita = leerLista('marcas').map(function (marca) {
-    var vendioTexto = primero(marca + ' - ¿Vendió oferta?').toLowerCase();
     return {
       marca: marca,
-      unidades: Number(primero(marca + ' - Unidades')) || 0,
-      vendioOferta: vendioTexto === 'sí' || vendioTexto === 'si',
-      oferta: primero(marca + ' - ¿Cuál oferta?')
+      presencia: esSi(primero(marca + ' - ¿Hay presencia?')),
+      oferta: primero(marca + ' - ¿Cuál oferta negociaste?')
     };
-  }).filter(function (m) { return m.unidades > 0 || m.vendioOferta; });
+  });
 
   if (!marcasVisita.length) return;
 
@@ -563,16 +594,15 @@ function procesarRespuestaFormulario(e) {
       fecha,
       pdv,
       m.marca,
-      m.unidades,
-      m.vendioOferta ? 'Sí' : 'No',
-      m.vendioOferta ? (m.oferta || '(sin especificar)') : CONFIG.SIN_OFERTA,
-      primero('Observaciones'),
+      m.presencia ? 'Sí' : 'No',
+      m.presencia ? (m.oferta || CONFIG.NINGUNA) : CONFIG.SIN_OFERTA,
       primero('Dirección de correo electrónico') || 'Formulario',
-      new Date()
+      new Date(),
+      ''
     ];
   });
 
-  var registros = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.HOJA_REGISTROS);
+  var registros = prepararRegistros();
   var inicio = registros.getLastRow() + 1;
   registros.getRange(inicio, 1, filas.length, filas[0].length).setValues(filas);
   registros.getRange(inicio, CONFIG.COL.FECHA, filas.length, 1).setNumberFormat('yyyy-mm-dd');
@@ -597,11 +627,7 @@ function doGet() {
 
 /** Marcas, ofertas y PDVs ya registrados. */
 function apiConfig() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss.getSheetByName(CONFIG.HOJA_REGISTROS) || !ss.getSheetByName(CONFIG.HOJA_CONFIG) ||
-      !ss.getSheetByName(CONFIG.HOJA_RESUMEN)) {
-    configurarHojasSilencioso();
-  }
+  configurarHojasSilencioso();
   return {
     titulo: 'Visita PDV',
     equipo: 'Equipo de ventas',
@@ -643,8 +669,8 @@ function apiResumenPDV(pdv) {
     marcas: leerLista('marcas').map(function (m) {
       var g = porMarca[m.toLowerCase()];
       return g
-        ? { marca: g.marca, visitas: g.visitas, unidades: g.unidades, conOferta: g.conOferta, ofertas: g.ofertas }
-        : { marca: m, visitas: 0, unidades: 0, conOferta: 0, ofertas: {} };
+        ? { marca: g.marca, visitas: g.visitas, presencia: g.presencia, conOferta: g.conOferta, ofertas: g.ofertas }
+        : { marca: m, visitas: 0, presencia: 0, conOferta: 0, ofertas: {} };
     })
   };
 }
@@ -658,10 +684,11 @@ function configurarHojasSilencioso() {
     config.getRange(2, 1, CONFIG.MARCAS_INICIALES.length, 1).setValues(CONFIG.MARCAS_INICIALES.map(function (m) { return [m]; }));
     config.getRange(2, 2, CONFIG.OFERTAS_INICIALES.length, 1).setValues(CONFIG.OFERTAS_INICIALES.map(function (o) { return [o]; }));
   }
-  var registros = ss.getSheetByName(CONFIG.HOJA_REGISTROS) || ss.insertSheet(CONFIG.HOJA_REGISTROS);
-  if (registros.getLastRow() === 0) {
-    registros.getRange(1, 1, 1, CONFIG.ENCABEZADOS.length).setValues([CONFIG.ENCABEZADOS]).setFontWeight('bold');
-    registros.setFrozenRows(1);
-  }
+  prepararRegistros();
   if (!ss.getSheetByName(CONFIG.HOJA_RESUMEN)) ss.insertSheet(CONFIG.HOJA_RESUMEN);
+  // Si se acaba de crear o limpiar Registros, el resumen viejo ya no aplica.
+  if (REGISTROS_RECREADOS) {
+    aplicarValidaciones();
+    generarResumen();
+  }
 }
