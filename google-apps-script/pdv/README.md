@@ -8,7 +8,7 @@ Nutribella, Alma de Romero**):
 - si **le vendió la oferta o no**,
 - **cuál oferta** fue.
 
-La encuesta (`Index.html` + `WebApp.gs`) funciona paso a paso: código del PDV → una pantalla
+La encuesta (`Index.html` + la función `doGet` de `Code.gs`) funciona paso a paso: código del PDV → una pantalla
 por marca (unidades, ¿vendió oferta?, ¿cuál?) → revisar → enviar → acumulado del PDV. La fecha
 se toma automáticamente. El avance se guarda en el celular y, al enviar, las respuestas caen en la hoja `Registros`.
 
@@ -20,15 +20,15 @@ se toma automáticamente. El avance se guarda en el celular y, al enviar, las re
 1. Crea una hoja de cálculo nueva en Google Sheets.
 2. Menú **Extensiones → Apps Script**.
 3. Borra el contenido de `Código.gs` y pega el de [`Code.gs`](Code.gs).
-4. Botón **+ → Secuencia de comandos**, nómbralo `WebApp` y pega [`WebApp.gs`](WebApp.gs).
-5. Botón **+ → HTML**, nómbralo exactamente `Index` y pega [`Index.html`](Index.html).
-6. Botón **+ → HTML**, nómbralo exactamente `Sidebar` y pega [`Sidebar.html`](Sidebar.html)
+4. Botón **+ → HTML** (no "Secuencia de comandos"), nómbralo exactamente `Index` y pega
+   [`Index.html`](Index.html).
+5. Botón **+ → HTML**, nómbralo exactamente `Sidebar` y pega [`Sidebar.html`](Sidebar.html)
    (opcional: es el formulario dentro de la hoja).
-7. (Opcional) En **Configuración del proyecto** marca "Mostrar el archivo de manifiesto
+6. (Opcional) En **Configuración del proyecto** marca "Mostrar el archivo de manifiesto
    appsscript.json" y reemplázalo por [`appsscript.json`](appsscript.json) para fijar la
    zona horaria de Bogotá.
-8. Guarda (Ctrl+S), vuelve a la hoja y recárgala. Aparece el menú **PDV**.
-9. **PDV → Configurar hojas (primera vez)**. Acepta los permisos que pide Google.
+7. Guarda (Ctrl+S), vuelve a la hoja y recárgala. Aparece el menú **PDV**.
+8. **PDV → Configurar hojas (primera vez)**. Acepta los permisos que pide Google.
 
 ## Publicar la encuesta (link para el celular)
 
@@ -39,7 +39,7 @@ se toma automáticamente. El avance se guarda en el celular y, al enviar, las re
 4. **Implementar** y acepta los permisos. Copia la URL que termina en `/exec`: ese es el
    link de la encuesta para compartir con los vendedores.
 
-Cada vez que cambies `Index.html` o `WebApp.gs`, ve a **Implementar → Administrar
+Cada vez que cambies `Index.html` o `Code.gs`, ve a **Implementar → Administrar
 implementaciones → editar (lápiz) → Versión: Nueva → Implementar** para que el link se
 actualice. Las marcas y ofertas se leen de la hoja `Config` en cada carga, sin redeploy.
 
