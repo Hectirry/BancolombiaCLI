@@ -588,8 +588,7 @@ function procesarRespuestaFormulario(e) {
 function doGet() {
   var cfg = apiConfig();
   var html = HtmlService.createHtmlOutputFromFile('Index').getContent();
-  // Inyecta la configuración real de la hoja en el bloque /*CFG*/ ... /*/CFG*/ de Index.html.
-  html = html.replace(/\/\*CFG\*\/[\s\S]*?\/\*\/CFG\*\//, '/*CFG*/' + JSON.stringify(cfg) + '/*/CFG*/');
+  // Las marcas y ofertas de la hoja Config las pide la página al cargar (apiConfig).
   return HtmlService.createHtmlOutput(html)
     .setTitle(cfg.titulo)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
@@ -599,7 +598,10 @@ function doGet() {
 /** Marcas, ofertas y PDVs ya registrados. */
 function apiConfig() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss.getSheetByName(CONFIG.HOJA_REGISTROS)) configurarHojasSilencioso();
+  if (!ss.getSheetByName(CONFIG.HOJA_REGISTROS) || !ss.getSheetByName(CONFIG.HOJA_CONFIG) ||
+      !ss.getSheetByName(CONFIG.HOJA_RESUMEN)) {
+    configurarHojasSilencioso();
+  }
   return {
     titulo: 'Visita PDV',
     equipo: 'Equipo de ventas',
