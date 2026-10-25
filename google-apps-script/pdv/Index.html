@@ -12,19 +12,20 @@
 <style>
 /* Layout: una pantalla por paso, barra superior fija con progreso por marca, botones de navegación fijos abajo. */
 :root{
-  --bg:#F1F4F3; --paper:#FFFFFF; --ink:#12302B; --muted:#5B6F6A; --line:#D5DEDB;
-  --accent:#0F766E; --accent-d:#0B5C56; --accent-l:#E0F2EF;
-  --ok:#1B8A5A; --ok-l:#E3F5EB; --no:#C8472F; --no-l:#FBE9E4; --warn:#F0B33E; --warn-l:#FFF5DB;
+  /* Colores Unilever: azul del logo (#08079A) y tonos derivados. "No" sigue en rojo para leerse de un vistazo. */
+  --bg:#F2F4FB; --paper:#FFFFFF; --ink:#0B1340; --muted:#5A6283; --line:#D6DBEE;
+  --accent:#1A23B8; --accent-d:#08079A; --accent-l:#E6E8FA;
+  --ok:#1A23B8; --ok-l:#E6E8FA; --no:#C8372D; --no-l:#FBE7E4; --warn:#F0B33E; --warn-l:#FFF5DB;
   --f:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
 }
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
-  --bg:#0F1A18; --paper:#182623; --ink:#E6EFEC; --muted:#9AB0AA; --line:#2C3D39;
-  --accent:#3DB9A8; --accent-d:#2A9A8B; --accent-l:#15332F;
-  --ok:#4CC586; --ok-l:#163626; --no:#F0805F; --no-l:#3A1F18; --warn:#F2C25E; --warn-l:#3A2E12; color-scheme:dark } }
+  --bg:#0B0E24; --paper:#151A3A; --ink:#E7EAFB; --muted:#A3A9CC; --line:#2A3160;
+  --accent:#4D5BF0; --accent-d:#1B1E7A; --accent-l:#1E2457;
+  --ok:#8C98FF; --ok-l:#1E2457; --no:#F0805F; --no-l:#3A1F18; --warn:#F2C25E; --warn-l:#3A2E12; color-scheme:dark } }
 :root[data-theme="dark"]{
-  --bg:#0F1A18; --paper:#182623; --ink:#E6EFEC; --muted:#9AB0AA; --line:#2C3D39;
-  --accent:#3DB9A8; --accent-d:#2A9A8B; --accent-l:#15332F;
-  --ok:#4CC586; --ok-l:#163626; --no:#F0805F; --no-l:#3A1F18; --warn:#F2C25E; --warn-l:#3A2E12; color-scheme:dark }
+  --bg:#0B0E24; --paper:#151A3A; --ink:#E7EAFB; --muted:#A3A9CC; --line:#2A3160;
+  --accent:#4D5BF0; --accent-d:#1B1E7A; --accent-l:#1E2457;
+  --ok:#8C98FF; --ok-l:#1E2457; --no:#F0805F; --no-l:#3A1F18; --warn:#F2C25E; --warn-l:#3A2E12; color-scheme:dark }
 
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
@@ -41,7 +42,8 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .chip{display:inline-block;background:var(--warn);color:#3A2300;font-weight:800;font-size:11px;letter-spacing:.04em;border-radius:6px;padding:3px 8px}
 .bar{display:flex;gap:6px;margin-top:10px}
 .bar span{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.22)}
-.bar span.on{background:#fff}.bar span.done{background:#8FE3D3}
+.bar span.on{background:#fff}.bar span.done{background:#9FB1FF}
+.logo{display:block;width:31px;height:32px;flex:0 0 auto}
 .catline{display:flex;justify-content:space-between;margin-top:8px;font-size:13px;opacity:.9}
 
 main{max-width:640px;margin:0 auto;padding-block:20px 130px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -312,8 +314,10 @@ var mock = {
 /* ---------- Render ---------- */
 var PASOS = ['presencia', 'ofertas', 'review'];
 var NOMBRE_PASO = { presencia:'Presencia', ofertas:'Ofertas', review:'Revisar' };
+/* Logo Unilever (blanco con fondo transparente) para la barra azul. */
+var LOGO = 'data:image/png;base64,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';
 function topbar(){
-  var h = '<div class="brand">'+esc(CFG.titulo)+(MODE==='mock'?' <span class="chip">VISTA PREVIA</span>':'')+'<small>'+esc(fmtFecha(S.fecha))+'</small></div>';
+  var h = '<div class="brand"><img class="logo" src="'+LOGO+'" alt="Unilever">'+esc(CFG.titulo)+(MODE==='mock'?' <span class="chip">VISTA PREVIA</span>':'')+'<small>'+esc(fmtFecha(S.fecha))+'</small></div>';
   var i = PASOS.indexOf(S.step);
   if (i !== -1) {
     h += '<div class="bar">'+PASOS.map(function(p, j){ return '<span class="'+(j < i ? 'done' : (j === i ? 'on' : ''))+'"></span>'; }).join('')+'</div>';
