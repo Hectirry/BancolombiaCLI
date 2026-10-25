@@ -128,18 +128,35 @@ textarea.field{min-height:72px;resize:vertical}
 .note{background:var(--warn-l);border:1px solid var(--warn);border-radius:12px;padding:12px 14px;font-size:14px;margin:0 0 12px}
 .spinner{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:30px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
-/* Paso de presencia: una fila por marca con Sí/No. Ofertas: selección múltiple con check. */
-.block.compact{padding:12px 14px;margin-bottom:10px}
-.prow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.pname{flex:1 1 130px;font-weight:800;font-size:16px}
-.prow .tags{flex:1 1 200px}
-.prow .tag{flex:1 1 0;min-width:0}
+/* Paso de presencia: una fila por marca, nombre y Sí/No en la misma línea (caben las 5 en pantalla). */
+.block.compact{padding:10px 12px;margin-bottom:8px}
+.prow{display:flex;align-items:center;gap:10px}
+.pname{flex:1 1 auto;min-width:0;font-weight:800;font-size:16px;line-height:1.2}
+.prow .tags{flex:0 0 auto;flex-wrap:nowrap;gap:6px}
+.prow .tag{flex:0 0 auto;width:78px;min-height:44px;padding:8px 10px 8px 18px}
 .tag.multi{padding-right:40px}
 .tag.multi::after{content:"";position:absolute;right:12px;top:50%;width:18px;height:18px;margin-top:-9px;border:2px solid var(--line);border-radius:5px;box-sizing:border-box}
 .tag.multi[aria-pressed="true"]::after{content:"✓";border-color:var(--accent);background:var(--accent);color:#fff;font-size:13px;line-height:14px;text-align:center}
 .tag.multi.no[aria-pressed="true"]::after{border-color:var(--no);background:var(--no)}
 .pills{display:flex;flex-wrap:wrap;gap:6px}
 .pname small{display:block;font-size:12px;font-weight:700;color:var(--muted)}
+/* Ofertas: dos columnas de opciones con check y encabezado por marca con contador. */
+.ofhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px}
+.ofhead h3{margin:0;font-size:18px;font-weight:800;line-height:1.2}
+.count{flex:0 0 auto;font-size:12px;font-weight:800;border-radius:999px;padding:3px 10px;background:var(--bg);color:var(--muted);white-space:nowrap}
+.count.on{background:var(--accent-l);color:var(--accent)}
+.count.none{background:var(--no-l);color:var(--no)}
+.tags.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tags.grid2 .tag{min-height:52px;padding:8px 34px 8px 16px;font-size:14px;line-height:1.25}
+.tags.grid2 .tag.multi::after{right:10px}
+/* Revisión: una fila corta por marca con una sola etiqueta; tocar la fila lleva a corregirla. */
+.rlist{display:flex;flex-direction:column}
+.rrow{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:10px 0;border:0;border-bottom:1px solid var(--line);background:none;color:inherit;text-align:left;cursor:pointer}
+.rrow:last-child{border-bottom:0}
+.rname{flex:0 1 auto;max-width:45%;font-weight:800;line-height:1.2}
+.rlabels{flex:1 1 auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+.rlabels .pill{margin:0}
+.chev{flex:0 0 auto;color:var(--muted);font-size:22px;line-height:1}
 </style>
 </head>
 <body>
@@ -181,7 +198,7 @@ function conOfertas(){ return presentes().filter(tienePromo); }
 /* Ofertas que se envían para una marca: "Otra" se cambia por el texto escrito. */
 function ofertasDe(a){
   if (a.presencia !== 'Sí') return [];
-  return (a.ofertas||[]).map(function(o){ return o === OTRA ? String(a.otra||'').replace(/,/g,' ').trim() : o; }).filter(Boolean);
+  return (a.ofertas||[]).map(function(o){ return o === OTRA ? String(a.otra||'').replace(/,/g,' ').replace(/\s+/g,' ').trim() : o; }).filter(Boolean);
 }
 function reales(lista){ return lista.filter(function(o){ return o !== NINGUNA; }); }
 
@@ -356,7 +373,10 @@ function vOfertas(){
   var h = '<h2>Ofertas negociadas</h2><p class="sub">Elige todas las que negociaste en cada marca. Puedes marcar varias.</p>';
   conOfertas().forEach(function(m, idx){
     var a = A(m);
-    var inner = '<p class="q">'+esc(m)+'</p><div class="tags col" role="group" aria-label="Ofertas de '+esc(m)+'">'+
+    var n = a.ofertas.length, ning = a.ofertas.indexOf(NINGUNA) !== -1;
+    var cnt = ning ? '<span class="count none">Ninguna</span>'
+      : (n ? '<span class="count on">'+n+(n === 1 ? ' elegida' : ' elegidas')+'</span>' : '<span class="count">Sin elegir</span>');
+    var inner = '<div class="ofhead"><h3>'+esc(m)+'</h3>'+cnt+'</div><div class="tags grid2" role="group" aria-label="Ofertas de '+esc(m)+'">'+
       CFG.ofertas.concat([OTRA, NINGUNA]).map(function(o){
         var on = a.ofertas.indexOf(o) !== -1;
         return '<button type="button" class="tag multi'+(o===NINGUNA?' no':'')+'" aria-pressed="'+on+'" data-of="'+esc(m)+'" data-v="'+esc(o)+'">'+esc(o)+'</button>';
@@ -385,18 +405,18 @@ function validateOfertas(){
 
 function vReview(){
   var h = '<h2>Revisar y enviar</h2><p class="sub">PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p>';
-  var conPres = 0, conOf = 0;
-  CFG.marcas.forEach(function(m, i){
+  var conPres = 0, conOf = 0, filas = '';
+  CFG.marcas.forEach(function(m){
     var a = A(m), pres = a.presencia === 'Sí', promo = tienePromo(m), ofs = promo ? reales(ofertasDe(a)) : [];
     if (pres) conPres++;
     if (ofs.length) conOf++;
     var pills = !pres ? '<span class="pill no">Sin presencia</span>'
       : (!promo ? '<span class="pill yes">Presente · sin promo</span>'
-        : (ofs.length ? ofs.map(function(o){ return '<span class="pill yes">'+esc(o)+'</span>'; }).join(' ') : '<span class="pill yes">Presente · sin oferta</span>'));
-    h += '<div class="block brandcard '+(pres?'ok':'off')+'"><div class="n">'+(i+1)+'</div><div><h3>'+esc(m)+'</h3>'+
-      '<p class="meta">'+(pres ? 'Con presencia' : 'Sin presencia')+'</p><div class="pills">'+pills+'</div>'+
-      '<div><button class="link" data-act="'+(pres && promo ? 'toOf' : 'toPres')+'">'+(pres && promo ? 'Editar ofertas' : 'Editar presencia')+'</button></div></div></div>';
+        : (ofs.length ? ofs.map(function(o){ return '<span class="pill yes">'+esc(o)+'</span>'; }).join('') : '<span class="pill yes">Presente · sin oferta</span>'));
+    filas += '<button type="button" class="rrow" data-act="'+(pres && promo ? 'toOf' : 'toPres')+'" aria-label="Corregir '+esc(m)+'">'+
+      '<span class="rname">'+esc(m)+'</span><span class="rlabels">'+pills+'</span><span class="chev" aria-hidden="true">›</span></button>';
   });
+  h += '<div class="block"><div class="rlist">'+filas+'</div><p class="hint" style="margin:8px 0 0">Toca una marca para corregirla.</p></div>';
   h += '<div class="block"><p style="margin:0">Presencia en <b>'+conPres+' de '+CFG.marcas.length+'</b> marcas y oferta negociada en <b>'+conOf+'</b>. Después de enviar ya no podrás editar esta visita.</p></div><div id="sendmsg"></div>';
   app(h);
   nav([{label:'Anterior', act:'backFromReview', ghost:true},{label:'Enviar visita', act:'send'}]);
