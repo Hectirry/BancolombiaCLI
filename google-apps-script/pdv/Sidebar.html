@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 12px; color: #222; }
+    h3 { margin: 0 0 10px; font-size: 15px; }
+    h4 { margin: 16px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #555; }
+    .ayuda { margin: 0 0 6px; color: #666; font-size: 12px; }
+    label { display: block; font-weight: bold; margin: 10px 0 3px; }
+    input[type=text], input[type=date] {
+      width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #bbb; border-radius: 4px; font-size: 13px;
+    }
+    .fila { display: flex; align-items: center; gap: 8px; border: 1px solid #ddd; border-radius: 6px;
+            padding: 6px 10px; margin-top: 6px; background: #fafafa; }
+    .fila .nombre { flex: 1; font-weight: bold; }
+    .fila .nombre small { font-weight: normal; color: #666; margin-left: 4px; }
+    .fila label { display: inline; font-weight: normal; margin: 0 0 0 8px; }
+    .marca { border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; margin-top: 8px; background: #fafafa; }
+    .marca .nombre { font-weight: bold; margin-bottom: 4px; }
+    .marca label { font-weight: normal; margin: 4px 0; }
+    .marca input[type=text] { margin-top: 4px; }
+    .error { border-color: #c5221f !important; background: #fce8e6 !important; }
+    #sinOfertas { color: #666; font-style: italic; }
+    button { margin-top: 14px; width: 100%; padding: 9px; font-size: 14px; border: 0; border-radius: 4px;
+             background: #1A23B8; color: #fff; cursor: pointer; }
+    button:disabled { background: #9FA6E6; cursor: default; }
+    #mensaje { margin-top: 10px; padding: 8px; border-radius: 4px; display: none; }
+    #mensaje.ok { display: block; background: #e6f4ea; color: #137333; }
+    #mensaje.error { display: block; background: #fce8e6; color: #c5221f; }
+  </style>
+</head>
+<body>
+  <h3>Registrar visita</h3>
+
+  <label for="fecha">Fecha</label>
+  <input type="date" id="fecha">
+
+  <label for="pdv">Código del PDV</label>
+  <input type="text" id="pdv" list="listaPdv" placeholder="Ej. 104523" autocomplete="off">
+  <datalist id="listaPdv"></datalist>
+
+  <h4>1. Presencia</h4>
+  <p class="ayuda">¿Hay presencia de cada marca en el PDV?</p>
+  <div id="presencia"></div>
+
+  <h4>2. Ofertas negociadas</h4>
+  <p class="ayuda">Solo marcas con presencia que tienen promo. Puedes marcar varias ofertas por marca.</p>
+  <div id="ofertas"><p id="sinOfertas">Marca Sí en alguna marca con promo para elegir sus ofertas.</p></div>
+
+  <button id="guardar" onclick="guardar()">Guardar visita</button>
+  <div id="mensaje"></div>
+
+  <script>
+    var NINGUNA = 'Ninguna';
+    var OTRA = 'Otra';
+    var DATOS = { marcas: [], ofertas: [], sinPromo: [], pdvs: [] };
+
+    function idSeguro(texto) {
+      return texto.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    }
+
+    function esc(texto) {
+      return String(texto).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    // Marcas sin promo (columna "Con promo" de Config): solo se registra presencia.
+    function tienePromo(marca) {
+      var k = String(marca).trim().toLowerCase();
+      return !(DATOS.sinPromo || []).some(function (x) { return String(x).trim().toLowerCase() === k; });
+    }
+
+    function presencia(marca) {
+      var marcado = document.querySelector('input[name="p_' + idSeguro(marca) + '"]:checked');
+      return marcado ? marcado.value : '';
+    }
+
+    function construir(datos) {
+      DATOS = datos;
+      document.getElementById('fecha').value = datos.hoy;
+
+      var dl = document.getElementById('listaPdv');
+      datos.pdvs.forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p;
+        dl.appendChild(o);
+      });
+
+      var opciones = datos.ofertas.concat([OTRA, NINGUNA]);
+      var contP = document.getElementById('presencia');
+      var contO = document.getElementById('ofertas');
+      datos.marcas.forEach(function (marca) {
+        var id = idSeguro(marca);
+
+        var fila = document.createElement('div');
+        fila.className = 'fila';
+        fila.id = 'fp_' + id;
+        fila.innerHTML = '<span class="nombre">' + esc(marca) + (tienePromo(marca) ? '' : '<small>(sin promo)</small>') + '</span>' +
+          '<label><input type="radio" name="p_' + id + '" value="Sí" onchange="cambiarPresencia(\'' + id + '\')"> Sí</label>' +
+          '<label><input type="radio" name="p_' + id + '" value="No" onchange="cambiarPresencia(\'' + id + '\')"> No</label>';
+        contP.appendChild(fila);
+        if (!tienePromo(marca)) return;
+
+        var bloque = document.createElement('div');
+        bloque.className = 'marca';
+        bloque.id = 'fo_' + id;
+        bloque.hidden = true;
+        bloque.innerHTML = '<div class="nombre">' + esc(marca) + '</div>' +
+          opciones.map(function (of) {
+            return '<label><input type="checkbox" name="o_' + id + '" value="' + esc(of) + '" onchange="marcarOferta(\'' + id + '\', this)"> ' + esc(of) + '</label>';
+          }).join('') +
+          '<input type="text" id="t_' + id + '" placeholder="Describe la otra oferta" hidden>';
+        contO.appendChild(bloque);
+      });
+    }
+
+    function cambiarPresencia(id) {
+      var presente = document.querySelector('input[name="p_' + id + '"]:checked').value === 'Sí';
+      document.getElementById('fp_' + id).classList.remove('error');
+      var bloque = document.getElementById('fo_' + id);
+      if (bloque) bloque.hidden = !presente;
+      if (bloque && !presente) {
+        Array.prototype.forEach.call(bloque.querySelectorAll('input[type=checkbox]'), function (c) { c.checked = false; });
+        var t = document.getElementById('t_' + id);
+        t.value = '';
+        t.hidden = true;
+        bloque.classList.remove('error');
+      }
+      var alguna = DATOS.marcas.some(function (m) { return tienePromo(m) && presencia(m) === 'Sí'; });
+      document.getElementById('sinOfertas').hidden = alguna;
+    }
+
+    // "Ninguna" excluye las demás ofertas de esa marca, y viceversa.
+    function marcarOferta(id, caja) {
+      var cajas = document.querySelectorAll('input[name="o_' + id + '"]');
+      if (caja.checked) {
+        Array.prototype.forEach.call(cajas, function (c) {
+          if (c !== caja && (caja.value === NINGUNA || c.value === NINGUNA)) c.checked = false;
+        });
+      }
+      var otra = document.querySelector('input[name="o_' + id + '"][value="' + OTRA + '"]').checked;
+      var t = document.getElementById('t_' + id);
+      t.hidden = !otra;
+      if (!otra) t.value = '';
+      document.getElementById('fo_' + id).classList.remove('error');
+    }
+
+    function ofertasMarcadas(id) {
+      return Array.prototype.filter.call(document.querySelectorAll('input[name="o_' + id + '"]'), function (c) { return c.checked; })
+        .map(function (c) { return c.value === OTRA ? document.getElementById('t_' + id).value.replace(/,/g, ' ').trim() : c.value; });
+    }
+
+    function mostrar(texto, tipo) {
+      var m = document.getElementById('mensaje');
+      m.textContent = texto;
+      m.className = tipo;
+    }
+
+    function fallar(idCaja, texto) {
+      var caja = document.getElementById(idCaja);
+      caja.classList.add('error');
+      caja.scrollIntoView({ block: 'center' });
+      mostrar(texto, 'error');
+    }
+
+    function guardar() {
+      var boton = document.getElementById('guardar');
+      var pdv = document.getElementById('pdv').value.trim().toUpperCase();
+      if (!pdv) { mostrar('Escribe el código del PDV.', 'error'); return; }
+
+      var marcas = [];
+      for (var i = 0; i < DATOS.marcas.length; i++) {
+        var marca = DATOS.marcas[i], id = idSeguro(marca), p = presencia(marca);
+        if (!p) { fallar('fp_' + id, 'Responde si hay presencia de ' + marca + '.'); return; }
+        var promo = tienePromo(marca);
+        var ofertas = p === 'Sí' && promo ? ofertasMarcadas(id) : [];
+        if (p === 'Sí' && promo && !ofertas.length) { fallar('fo_' + id, 'Elige al menos una oferta para ' + marca + ', o "' + NINGUNA + '".'); return; }
+        if (ofertas.indexOf('') !== -1) { fallar('fo_' + id, 'Describe la otra oferta de ' + marca + '.'); return; }
+        marcas.push({ marca: marca, presencia: p === 'Sí', ofertas: ofertas });
+      }
+
+      boton.disabled = true;
+      mostrar('Guardando…', 'ok');
+      google.script.run
+        .withSuccessHandler(function (msg) {
+          mostrar(msg, 'ok');
+          boton.disabled = false;
+          limpiar(pdv);
+        })
+        .withFailureHandler(function (err) {
+          mostrar(err.message || String(err), 'error');
+          boton.disabled = false;
+        })
+        .guardarVisita({ fecha: document.getElementById('fecha').value, pdv: pdv, marcas: marcas });
+    }
+
+    function limpiar(pdv) {
+      Array.prototype.forEach.call(document.querySelectorAll('#presencia input, #ofertas input[type=checkbox]'), function (c) { c.checked = false; });
+      DATOS.marcas.forEach(function (marca) {
+        if (!tienePromo(marca)) return;
+        var id = idSeguro(marca);
+        document.getElementById('fo_' + id).hidden = true;
+        var t = document.getElementById('t_' + id);
+        t.value = '';
+        t.hidden = true;
+      });
+      document.getElementById('sinOfertas').hidden = false;
+      // Se conserva el PDV y la fecha por si se registra otra visita seguida.
+      if (pdv && !DATOS.pdvs.some(function (p) { return p.toLowerCase() === pdv.toLowerCase(); })) {
+        DATOS.pdvs.push(pdv);
+        var o = document.createElement('option');
+        o.value = pdv;
+        document.getElementById('listaPdv').appendChild(o);
+      }
+    }
+
+    google.script.run
+      .withSuccessHandler(construir)
+      .withFailureHandler(function (err) { mostrar('No se pudo cargar: ' + (err.message || err), 'error'); })
+      .obtenerDatosFormulario();
+  </script>
+</body>
+</html>
