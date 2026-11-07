@@ -1592,3 +1592,136 @@ export async function postmortemCommand(opts: {
     c.dim("  The ledger never refits anything; the tournament does. Payout, co-winners and RTP are not criteria here."),
   );
 }
+
+/**
+ * `baloto simulate` — the coverage lever over a season, and the ball choice
+ * replayed on the real nights. Nothing here predicts: the per-night rates
+ * are exact; the simulation shows what they feel like (first hit, worst
+ * drought) and the replay shows that any way of choosing balls lands on
+ * the same rate with droughts of the same kind.
+ */
+export async function simulateCommand(opts: {
+  seasons?: string;
+  nights?: string;
+  drought?: string;
+  window?: string;
+  seed?: string;
+  tickets?: string;
+  revancha?: boolean;
+  replay?: string;
+}): Promise<void> {
+  const { simulateSeasons, replayBallRules, pairNights } = await import("../baloto/simulate.ts");
+  const seasons = Math.max(1, Number(opts.seasons ?? 20000));
+  const nights = Math.max(1, Number(opts.nights ?? 156));
+  const drought = Math.max(1, Number(opts.drought ?? 10));
+  const window = Math.max(1, Number(opts.window ?? 12));
+  const seed = Number(opts.seed ?? 1);
+
+  console.log(c.bold(`Fair machine — ${seasons.toLocaleString("es-CO")} seasons of ${nights} nights, distinct Súper Balotas, disjoint main numbers`));
+  console.log(c.dim("  The per-night rates are exact (N/16, or 1 − (1 − N/16)² with Revancha); the rest is what they look like over a season."));
+  console.log("");
+  const plans = [1, 2, 3, 4, 6, 8].flatMap((n) => [
+    { tickets: n, revancha: false },
+    { tickets: n, revancha: true },
+  ]);
+  const rows = plans.map((p) => simulateSeasons({ ...p, seasons, nights, droughtOfInterest: drought, window, seed }));
+  console.log(
+    table(
+      ["TICKETS", "REVANCHA", "COST/NIGHT", "P(SÚPER) EXACT", "SIMULATED", "P(WIN ANY)", "FIRST HIT (MEDIAN / P90)", `P(≥1 IN ${window})`, "WORST DROUGHT (MEDIAN / P90)", `SEASONS WITH ≥${drought}`, "COST PER HIT"],
+      rows.map((r) => [
+        String(r.tickets),
+        r.revancha ? "yes" : "no",
+        money(r.cost),
+        pct(r.exactHit),
+        pct(r.simulatedHit),
+        pct(r.exactWin),
+        `night ${r.firstHitMedian} / ${r.firstHitP90}`,
+        pct(r.hitWithinWindow),
+        `${r.longestDroughtMedian} / ${r.longestDroughtP90}`,
+        pct(r.seasonsWithDrought),
+        money(r.costPerHit),
+      ]),
+    ),
+  );
+  console.log("");
+  console.log(
+    c.dim(
+      "  A drought is a run of nights without a Súper Balota hit. \"Seasons with ≥k\" is the share of simulated\n" +
+        "  seasons whose worst drought reached k nights: what the coverage level hands out in a normal year.\n" +
+        "  Cost per hit is the per-night cost divided by the exact rate; Revancha is cheapest up to seven tickets.",
+    ),
+  );
+
+  const dataset = await loadDataset();
+  if (!dataset) {
+    console.log(c.dim("\n  No dataset on disk: run `baloto update` to replay ball rules on the real nights."));
+    return;
+  }
+  const draws = [...drawsFor(dataset, "baloto"), ...drawsFor(dataset, "revancha")];
+  const paired = pairNights(draws);
+  if (paired.length === 0) return;
+  const tickets = Math.max(1, Math.min(16, Number(opts.tickets ?? 2)));
+  const revancha = opts.revancha === true;
+  const windows = (opts.replay ?? "all,100,12").split(",").map((w) => w.trim()).filter(Boolean);
+  console.log("");
+  console.log(
+    c.bold(
+      `Real nights — ${paired.length} with both draws (${paired[0]!.date} to ${paired[paired.length - 1]!.date}), ` +
+        `${tickets} distinct ball(s) a night${revancha ? " with Revancha" : ""}, walk-forward`,
+    ),
+  );
+  console.log(c.dim("  Each rule sees only the Baloto draws before the night it plays. On a fair machine every rule sits at the same rate."));
+  for (const w of windows) {
+    const rows = replayBallRules(draws, { tickets, revancha, window: w === "all" ? undefined : Number(w) });
+    const first = rows[0];
+    if (!first) continue;
+    console.log("");
+    console.log(`  ${w === "all" ? "All nights" : `Last ${w} nights`} — ${first.nights} nights, ${first.expected.toFixed(1)} hits expected`);
+    console.log(
+      table(
+        ["RULE", "HITS", "RATE", "Z", "LONGEST DROUGHT", "WOULD PLAY NEXT"],
+        rows.map((r) => [r.name, String(r.hits), pct(r.rate), r.z.toFixed(2), String(r.longestDrought), r.next.join(", ")]),
+      ),
+    );
+  }
+  console.log("");
+  console.log(
+    c.yellow(
+      "  Read the z column against the tournament's Bonferroni threshold (about 3), not against zero: the best of\n" +
+        "  several rules on a short window is always above zero. The fixed sets are read in hindsight on the same\n" +
+        "  history that suggested them; \"most drawn so far\" is the honest walk-forward version of that choice.",
+    ),
+  );
+}
+
+/**
+ * `baloto ledger backup|restore` — the committed copy of the recommendation
+ * ledger. The live file sits outside the repository and a fresh container
+ * does not have it; `backup` copies it into `data/`, `restore` adds back the
+ * entries the live file lacks and never rewrites one it has.
+ */
+export async function ledgerCommand(action: string, path: string | undefined): Promise<void> {
+  const { ledgerBackupPath, ledgerPath, loadLedger, mergeLedgers, readLedgerFile, saveLedger, writeLedgerFile } =
+    await import("../baloto/ledger.ts");
+  const target = path ?? ledgerBackupPath();
+  if (action === "backup") {
+    const live = await loadLedger();
+    await writeLedgerFile(target, live);
+    console.log(c.green(`  Backed up ${live.entries.length} entries from ${ledgerPath()} to ${target}. Commit it.`));
+    return;
+  }
+  if (action === "restore") {
+    const backup = await readLedgerFile(target);
+    const live = await loadLedger();
+    const merged = mergeLedgers(live, backup);
+    await saveLedger(merged.ledger);
+    console.log(
+      c.green(
+        `  Restored ${merged.added} entries from ${target} into ${ledgerPath()}` +
+          (merged.kept > 0 ? `; ${merged.kept} already there were kept as they are.` : "."),
+      ),
+    );
+    return;
+  }
+  throw new Error(`ledger: unknown action "${action}" (use backup or restore)`);
+}

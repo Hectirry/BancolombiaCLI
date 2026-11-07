@@ -288,6 +288,30 @@ baloto
   });
 
 baloto
+  .command("simulate")
+  .description("What each level of coverage buys over a season, and the ball choice replayed on the real nights")
+  .option("--seasons <number>", "Seasons simulated per plan", "20000")
+  .option("--nights <number>", "Nights per season (156 is a year at three draws a week)", "156")
+  .option("--drought <number>", "Drought length whose per-season frequency is reported", "10")
+  .option("--window <number>", "Nights for \"at least one hit within\"", "12")
+  .option("--seed <number>", "Seed for the simulation", "1")
+  .option("-n, --tickets <number>", "Distinct Súper Balotas a night for the real-night replay", "2")
+  .option("--revancha", "Replay the real nights with Revancha (both draws count)")
+  .option("--replay <windows>", "Replay windows, comma-separated: all or a number of nights", "all,100,12")
+  .action(async (opts: Record<string, string>) => {
+    const { simulateCommand } = await import("./commands/baloto.ts");
+    await simulateCommand(opts as never);
+  });
+
+baloto
+  .command("ledger <action> [path]")
+  .description("backup: copy the live ledger into data/ (commit it); restore: add the backup's entries the live ledger lacks")
+  .action(async (action: string, path: string | undefined) => {
+    const { ledgerCommand } = await import("./commands/baloto.ts");
+    await ledgerCommand(action, path);
+  });
+
+baloto
   .command("regime")
   .description("Hidden-Markov regimes vs i.i.d. by BIC, and Baloto × Revancha independence")
   .option("--states <number>", "Hidden states to fit", "2")

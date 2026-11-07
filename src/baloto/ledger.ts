@@ -12,6 +12,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { datasetPath, type Draw, type Game } from "./dataset.ts";
 import { ECONOMICS, PRIZE_TIERS, SUPER_POOL, classify } from "./rules.ts";
 import { poissonBinomialPmf } from "./numeric.ts";
@@ -84,6 +85,43 @@ export async function saveLedger(ledger: Ledger): Promise<void> {
   const path = ledgerPath();
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(ledger, null, 2), "utf8");
+}
+
+/**
+ * The committed copy of the ledger, `data/baloto-ledger.json` at the package
+ * root. The live ledger lives outside the repository and a fresh container
+ * does not have it; this copy is the backup it is restored from, never a
+ * place to edit entries.
+ */
+export function ledgerBackupPath(): string {
+  return fileURLToPath(new URL("../../data/baloto-ledger.json", import.meta.url));
+}
+
+export async function readLedgerFile(path: string): Promise<Ledger> {
+  const parsed = JSON.parse(await readFile(path, "utf8")) as Partial<Ledger>;
+  if (!Array.isArray(parsed.entries)) throw new Error(`${path} is not a ledger: no "entries" array`);
+  return { entries: parsed.entries };
+}
+
+export async function writeLedgerFile(path: string, ledger: Ledger): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(ledger, null, 2), "utf8");
+}
+
+const entryKey = (e: LedgerEntry) => `${e.targetDate}|${e.game}|${e.model}`;
+
+/**
+ * Restore: add the backup's entries that the live ledger does not have. An
+ * entry the live ledger already holds for the same (draw, game, model) is
+ * kept as it is — the live file is the word that was said before the draw,
+ * and a backup never rewrites it.
+ */
+export function mergeLedgers(live: Ledger, backup: Ledger): { ledger: Ledger; added: number; kept: number } {
+  const have = new Set(live.entries.map(entryKey));
+  const added = backup.entries.filter((e) => !have.has(entryKey(e)));
+  const entries = [...live.entries, ...added];
+  entries.sort((a, b) => a.targetDate.localeCompare(b.targetDate) || a.recordedAt.localeCompare(b.recordedAt));
+  return { ledger: { entries }, added: added.length, kept: backup.entries.length - added.length };
 }
 
 /** Draw days: Monday (1), Wednesday (3), Saturday (6). */

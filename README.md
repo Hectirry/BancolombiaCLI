@@ -227,6 +227,8 @@ bancolombia baloto super -n 2 --revancha    # the same tickets in both of the ni
 bancolombia baloto super -n 3 --record      # …and write the tickets to the ledger before the draw
 bancolombia baloto score                    # every recorded recommendation vs the draw that followed
 bancolombia baloto postmortem --draws 12    # why the last draws were missed, and what chance alone would have "found"
+bancolombia baloto simulate -n 2 --revancha # what each level of coverage buys over a season; the ball choice replayed on the real nights
+bancolombia baloto ledger backup            # copy the live ledger into data/ (commit it); `ledger restore` brings it back
 ```
 
 ### The ledger: the model's word, on the record, before the draw
@@ -255,6 +257,31 @@ plays held fixed and only the outcomes redrawn). On 2026-10-05 the best rule
 in hindsight hit 5 of 12 against 2.25 expected; the best of thirteen rules
 reaches 5 or more in 44 % of fair windows. Beside both sits the full
 tournament z, which alone can change anything.
+
+### Simulating a season: what coverage feels like
+
+`baloto simulate` answers the question a drought raises — "is the model
+broken?" — with the same discipline as everything else: a measurement. Its
+first table plays N distinct Súper Balotas a night, with and without
+Revancha, through 20 000 simulated seasons of 156 nights on a fair machine.
+The per-night rates are exact and known (N/16, or 1 − (1 − N/16)² with
+Revancha); the simulation adds what the formula does not show at a glance:
+when the first hit arrives, how long the worst drought of a season runs,
+and how often a drought of a given length appears. With two tickets and
+Revancha (23.4 % a night) the median first hit is night 3, the worst drought
+of a typical year is 14 nights, and 95 % of seasons contain a drought of ten
+or more. A ten-night drought is not the model failing; it is what that
+coverage level hands out every year. Four tickets with Revancha bring the
+typical worst drought down to 7 and make a ten-night one a one-in-five-years
+event.
+
+Its second table replays seven ways of choosing the balls — fixed sets, the
+most and least drawn so far, a seeded rotation, repeat-the-last — over the
+988 real nights that have both draws, strictly walk-forward. All of them
+land between 22.9 % and 25.4 % against 23.4 % expected, and every one lived
+through a drought of 17 to 26 nights. The best of seven rules on a window of
+100 or 12 nights is always above zero; it is read against the tournament's
+Bonferroni threshold, and nothing reaches it.
 
 ### Regimes and the second machine
 

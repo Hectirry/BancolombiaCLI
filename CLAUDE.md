@@ -231,10 +231,20 @@ ledger never changes a model; the tournament does.
 The ledger lives outside the repo, and a container reset wipes it (this
 happened on 2026-10-19; eight entries were restored from a score table and
 carry a note saying their original `recordedAt` was lost). So after every
-`--record`, copy it to `data/baloto-ledger.json` and commit; on a fresh
-container restore it with
-`mkdir -p ~/.bancolombia && cp data/baloto-ledger.json ~/.bancolombia/`.
-The committed copy is a backup, never a place to edit entries.
+`--record`, run `bun src/index.ts baloto ledger backup` (writes
+`data/baloto-ledger.json`) and commit; on a fresh container run
+`bun src/index.ts baloto ledger restore`, which adds the backup's entries
+the live ledger lacks and never rewrites one it has. The committed copy is a
+backup, never a place to edit entries.
+
+`baloto simulate` (`src/baloto/simulate.ts`) is the coverage lever made
+visible: fair-machine seasons per plan (first hit, worst drought, share of
+seasons with a drought ≥ k, cost per hit) and seven ball-choice rules
+replayed walk-forward on the real nights. It is a tool for reading a drought
+against what the coverage level hands out, and for showing that any way of
+choosing balls lands on the same rate. It predicts nothing and never changes
+a recommendation; a rule that looks good there still has to clear the
+tournament.
 
 When the owner asks "¿por qué no acertaste?", run `baloto postmortem`
 (`src/baloto/postmortem.ts`, default `--draws 12`) instead of reasoning from

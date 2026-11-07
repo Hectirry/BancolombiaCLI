@@ -203,3 +203,54 @@ describe("sample size", () => {
     expect(detectableDeparture(0, 0.1875)).toBe(1);
   });
 });
+
+describe("backup and restore", () => {
+  const entry = (targetDate: string, model = "m", recordedAt = "a"): Ledger["entries"][number] => ({
+    recordedAt,
+    targetDate,
+    game: "baloto",
+    model,
+    tickets: [{ main: [1, 2, 3, 4, 5], super: 1 }],
+  });
+
+  test("restore adds what the live ledger lacks and never rewrites what it has", async () => {
+    const { mergeLedgers } = await import("../src/baloto/ledger.ts");
+    const live: Ledger = { entries: [entry("2026-10-05"), { ...entry("2026-10-07"), note: "live word" }] };
+    const backup: Ledger = {
+      entries: [entry("2026-10-03"), { ...entry("2026-10-07"), note: "backup word" }, entry("2026-10-07", "other")],
+    };
+    const merged = mergeLedgers(live, backup);
+    expect(merged.added).toBe(2);
+    expect(merged.kept).toBe(1);
+    expect(merged.ledger.entries.map((e) => `${e.targetDate}/${e.model}`)).toEqual([
+      "2026-10-03/m",
+      "2026-10-05/m",
+      "2026-10-07/m",
+      "2026-10-07/other",
+    ]);
+    expect(merged.ledger.entries.find((e) => e.targetDate === "2026-10-07" && e.model === "m")!.note).toBe("live word");
+    // restoring the same backup again changes nothing
+    const again = mergeLedgers(merged.ledger, backup);
+    expect(again.added).toBe(0);
+    expect(again.ledger).toEqual(merged.ledger);
+  });
+
+  test("the backup path is data/baloto-ledger.json at the package root, and files round-trip", async () => {
+    const { ledgerBackupPath, readLedgerFile, writeLedgerFile } = await import("../src/baloto/ledger.ts");
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    expect(ledgerBackupPath().endsWith(join("data", "baloto-ledger.json"))).toBe(true);
+    const dir = await mkdtemp(join(tmpdir(), "ledger-"));
+    try {
+      const path = join(dir, "nested", "ledger.json");
+      const ledger: Ledger = { entries: [entry("2026-10-05")] };
+      await writeLedgerFile(path, ledger);
+      expect(await readLedgerFile(path)).toEqual(ledger);
+      await writeLedgerFile(path, { entries: undefined } as never);
+      await expect(readLedgerFile(path)).rejects.toThrow("not a ledger");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
