@@ -1,0 +1,94 @@
+{
+ "baloto": {
+  "game": "baloto",
+  "mode": "full",
+  "draws": 580,
+  "lastDate": "2026-10-17",
+  "expectedSuper": 108.75,
+  "expectedMain": 1011.6279069767442,
+  "methods": {
+   "stat": {
+    "superHits": 111,
+    "superZ": 0.23936254867506487,
+    "mainMatches": 1026,
+    "mainZ": 0.5053414186214548
+   },
+   "markov": {
+    "superHits": 108,
+    "superZ": -0.07978751622502163,
+    "mainMatches": 985,
+    "mainZ": -0.9362717222031778
+   },
+   "pattern": {
+    "superHits": 108,
+    "superZ": -0.07978751622502163,
+    "mainMatches": 1044,
+    "mainZ": 1.1382447487395861
+   },
+   "quick_ensemble": {
+    "superHits": 114,
+    "superZ": 0.5585126135751514,
+    "mainMatches": 997,
+    "mainZ": -0.5143361687910902
+   },
+   "dl": {
+    "superHits": 103,
+    "superZ": -0.6117042910584991,
+    "mainMatches": 954,
+    "mainZ": -2.0262719018510706
+   },
+   "master": {
+    "superHits": 113,
+    "superZ": 0.4521292586084559,
+    "mainMatches": 1061,
+    "mainZ": 1.7359867827400435
+   }
+  }
+ },
+ "revancha": {
+  "game": "revancha",
+  "mode": "full",
+  "draws": 580,
+  "lastDate": "2026-10-17",
+  "expectedSuper": 108.75,
+  "expectedMain": 1011.6279069767442,
+  "methods": {
+   "stat": {
+    "superHits": 104,
+    "superZ": -0.5053209360918036,
+    "mainMatches": 1013,
+    "mainZ": 0.0482445690916932
+   },
+   "markov": {
+    "superHits": 106,
+    "superZ": -0.29255422615841264,
+    "mainMatches": 1040,
+    "mainZ": 0.9975995642688902
+   },
+   "pattern": {
+    "superHits": 100,
+    "superZ": -0.9308543559585857,
+    "mainMatches": 1002,
+    "mainZ": -0.3385296882027204
+   },
+   "quick_ensemble": {
+    "superHits": 113,
+    "superZ": 0.4521292586084559,
+    "mainMatches": 997,
+    "mainZ": -0.5143361687910902
+   },
+   "dl": {
+    "superHits": 115,
+    "superZ": 0.6648959685418468,
+    "mainMatches": 970,
+    "mainZ": -1.4636911639682872
+   },
+   "master": {
+    "superHits": 98,
+    "superZ": -1.1436210658919765,
+    "mainMatches": 1054,
+    "mainZ": 1.4898577099163257
+   }
+  }
+ }
+}
