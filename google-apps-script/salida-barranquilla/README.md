@@ -36,3 +36,17 @@ Versión: Nueva versión → Implementar**. El link no cambia.
 
 Las preguntas están en `SB.SECCIONES` al inicio de `Code.gs`. Si cambias una pregunta
 cuando ya hay visitas, renombra a mano la columna correspondiente en `Registros`.
+
+## Tabular las respuestas
+
+[`analisis/tabular.py`](analisis/tabular.py) convierte la pestaña `Registros` (exportada como
+CSV, o como JSON de la API de Google Sheets) en tablas: visitas por canal, % Sí por pregunta
+de cada bloque, caras de Nutribella, Alma de Romero y H&S, POP y la lista de visitas.
+
+```
+python3 analisis/tabular.py registros.csv --por-canal
+python3 analisis/tabular.py registros.csv --canal "Tienda tradicional" --desde 2026-11-01
+```
+
+Para exportar a CSV: en la hoja, pestaña Registros, **Archivo → Descargar → Valores separados
+por comas (.csv)**.
