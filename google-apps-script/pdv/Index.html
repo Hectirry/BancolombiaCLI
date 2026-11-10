@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Visita PDV</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Layout: una pantalla por paso, barra superior fija con progreso por marca, botones de navegación fijos abajo. */
+:root{
+  /* Colores Unilever: azul del logo (#08079A) y tonos derivados. "No" sigue en rojo para leerse de un vistazo. */
+  --bg:#F2F4FB; --paper:#FFFFFF; --ink:#0B1340; --muted:#5A6283; --line:#D6DBEE;
+  --accent:#1A23B8; --accent-d:#08079A; --accent-l:#E6E8FA;
+  --ok:#1A23B8; --ok-l:#E6E8FA; --no:#C8372D; --no-l:#FBE7E4; --warn:#F0B33E; --warn-l:#FFF5DB;
+  --f:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#0B0E24; --paper:#151A3A; --ink:#E7EAFB; --muted:#A3A9CC; --line:#2A3160;
+  --accent:#4D5BF0; --accent-d:#1B1E7A; --accent-l:#1E2457;
+  --ok:#8C98FF; --ok-l:#1E2457; --no:#F0805F; --no-l:#3A1F18; --warn:#F2C25E; --warn-l:#3A2E12; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0B0E24; --paper:#151A3A; --ink:#E7EAFB; --muted:#A3A9CC; --line:#2A3160;
+  --accent:#4D5BF0; --accent-d:#1B1E7A; --accent-l:#1E2457;
+  --ok:#8C98FF; --ok-l:#1E2457; --no:#F0805F; --no-l:#3A1F18; --warn:#F2C25E; --warn-l:#3A2E12; color-scheme:dark }
+
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--warn);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--accent-d)}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--accent-d);color:#fff;
+  padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top-in{max-width:640px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-.01em}
+.brand small{font-weight:600;opacity:.75;font-size:13px;margin-left:auto;text-align:right}
+.chip{display:inline-block;background:var(--warn);color:#3A2300;font-weight:800;font-size:11px;letter-spacing:.04em;border-radius:6px;padding:3px 8px}
+.bar{display:flex;gap:6px;margin-top:10px}
+.bar span{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.22)}
+.bar span.on{background:#fff}.bar span.done{background:#9FB1FF}
+.logo{display:block;width:31px;height:32px;flex:0 0 auto}
+.catline{display:flex;justify-content:space-between;margin-top:8px;font-size:13px;opacity:.9}
+
+main{max-width:640px;margin:0 auto;padding-block:20px 130px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:30px;line-height:1.1;margin:0 0 10px;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:22px;line-height:1.2;margin:4px 0 4px;font-weight:800;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 18px}
+p{margin:0 0 12px}
+
+.hero{background:linear-gradient(160deg,var(--accent) 0%,var(--accent-d) 100%);color:#fff;border-radius:20px;padding:26px 22px 22px;margin:0 0 14px}
+.hero h1{color:#fff}
+.hero p{margin:0;opacity:.92}
+.hero .eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.8;margin-bottom:8px}
+
+.block{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px;margin:0 0 12px}
+.block.err{border-color:var(--no);box-shadow:0 0 0 2px var(--no-l)}
+.q{font-weight:700;font-size:15px;margin:14px 0 8px}
+.q:first-child{margin-top:0}
+.hint{font-size:14px;color:var(--muted);margin:0 0 8px}
+.msg{color:var(--no);font-size:14px;font-weight:700;margin:8px 0 0}
+.section{font-size:13px;color:var(--muted);font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin:22px 0 8px}
+
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{position:relative;flex:1 1 120px;min-height:48px;border:1.5px solid var(--line);background:var(--paper);border-radius:6px 12px 12px 6px;
+  padding:10px 12px 10px 20px;text-align:left;font-weight:700;cursor:pointer}
+.tag::before{content:"";position:absolute;left:0;top:0;bottom:0;width:8px;border-radius:5px 0 0 5px;background:var(--line)}
+.tag[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-l)}
+.tag[aria-pressed="true"]::before{background:var(--accent)}
+.tag.yes[aria-pressed="true"]{border-color:var(--ok);background:var(--ok-l)}
+.tag.yes[aria-pressed="true"]::before{background:var(--ok)}
+.tag.no[aria-pressed="true"]{border-color:var(--no);background:var(--no-l)}
+.tag.no[aria-pressed="true"]::before{background:var(--no)}
+.tags.col{flex-direction:column}
+.tags.col .tag{flex:none}
+
+.field{display:block;width:100%;min-height:48px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--paper);color:var(--ink)}
+.field:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-l)}
+textarea.field{min-height:72px;resize:vertical}
+.unit{position:relative}.unit .field{padding-right:58px}
+.unit b{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700;font-size:14px}
+.stepper{display:grid;grid-template-columns:52px 1fr 52px;gap:8px}
+.stepper button{min-height:48px;border-radius:10px;border:1.5px solid var(--line);background:var(--paper);font-weight:800;font-size:20px;cursor:pointer}
+.stepper .field{text-align:center;font-weight:800;font-size:20px;font-variant-numeric:tabular-nums}
+.lbl{font-size:13px;color:var(--muted);font-weight:700;margin:0 0 6px;display:block}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+@media (max-width:420px){.row2{grid-template-columns:1fr}}
+
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--bg);border-top:1px solid var(--line);
+  padding-block:12px calc(12px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.nav-in{max-width:640px;margin:0 auto;display:flex;gap:10px}
+.btn{min-height:52px;border-radius:12px;border:0;padding:0 18px;font-weight:800;cursor:pointer;background:var(--accent);color:#fff;flex:2}
+.btn:active{background:var(--accent-d)}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line);flex:1}
+.btn[disabled]{opacity:.55;cursor:wait}
+.link{background:none;border:0;color:var(--accent);font-weight:800;padding:8px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+.list{margin:8px 0 0;padding:0;list-style:none;border:1px solid var(--line);border-radius:12px;background:var(--paper);max-height:260px;overflow:auto}
+.list li button{display:flex;justify-content:space-between;gap:10px;width:100%;padding:13px 14px;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;cursor:pointer}
+.list li:last-child button{border-bottom:0}
+.list li button span{color:var(--muted);font-size:14px;white-space:nowrap}
+
+.brandcard{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:start}
+.brandcard .n{width:44px;height:44px;border-radius:10px;background:var(--accent-l);color:var(--accent);display:grid;place-items:center;font-weight:800;font-size:18px}
+.brandcard.ok .n{background:var(--ok);color:#fff}
+.brandcard.off .n{background:var(--bg);color:var(--muted)}
+.brandcard h3{margin:0;font-size:17px;line-height:1.25}
+.brandcard .meta{color:var(--muted);font-size:14px;margin:2px 0 0}
+.pill{display:inline-block;font-weight:800;border-radius:8px;padding:3px 9px;font-size:13px;margin-top:6px}
+.pill.yes{background:var(--ok-l);color:var(--ok)}.pill.no{background:var(--no-l);color:var(--no)}
+
+.hero-score{background:linear-gradient(160deg,var(--accent) 0%,var(--accent-d) 100%);color:#fff;border-radius:18px;padding:22px 20px;margin:0 0 14px}
+.hero-score .big{font-size:64px;line-height:1;font-weight:800;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.hero-score .big small{font-size:20px;opacity:.7;letter-spacing:0;font-weight:700}
+.hero-score p{opacity:.85;margin:6px 0 0}
+.shelf{margin:0;padding:0;list-style:none}
+.shelf li{padding:12px 0;border-bottom:1px solid var(--line)}
+.shelf li:last-child{border-bottom:0}
+.shelf .top-row{display:flex;justify-content:space-between;gap:10px;font-weight:800;margin-bottom:6px}
+.shelf .top-row span:last-child{font-variant-numeric:tabular-nums;white-space:nowrap}
+.meter{height:10px;border-radius:5px;background:var(--bg);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--accent);border-radius:5px;transform-origin:left;animation:grow .6s ease-out both}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.comp{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--muted);font-size:13px;margin-top:6px}
+
+.note{background:var(--warn-l);border:1px solid var(--warn);border-radius:12px;padding:12px 14px;font-size:14px;margin:0 0 12px}
+.spinner{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:30px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Paso de presencia: una fila por marca, nombre y Sí/No en la misma línea (caben las 5 en pantalla). */
+.block.compact{padding:10px 12px;margin-bottom:8px}
+.prow{display:flex;align-items:center;gap:10px}
+.pname{flex:1 1 auto;min-width:0;font-weight:800;font-size:16px;line-height:1.2}
+.prow .tags{flex:0 0 auto;flex-wrap:nowrap;gap:6px}
+.prow .tag{flex:0 0 auto;width:78px;min-height:44px;padding:8px 10px 8px 18px}
+.tag.multi{padding-right:40px}
+.tag.multi::after{content:"";position:absolute;right:12px;top:50%;width:18px;height:18px;margin-top:-9px;border:2px solid var(--line);border-radius:5px;box-sizing:border-box}
+.tag.multi[aria-pressed="true"]::after{content:"✓";border-color:var(--accent);background:var(--accent);color:#fff;font-size:13px;line-height:14px;text-align:center}
+.tag.multi.no[aria-pressed="true"]::after{border-color:var(--no);background:var(--no)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pname small{display:block;font-size:12px;font-weight:700;color:var(--muted)}
+/* Ofertas: dos columnas de opciones con check y encabezado por marca con contador. */
+.ofhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px}
+.ofhead h3{margin:0;font-size:18px;font-weight:800;line-height:1.2}
+.count{flex:0 0 auto;font-size:12px;font-weight:800;border-radius:999px;padding:3px 10px;background:var(--bg);color:var(--muted);white-space:nowrap}
+.count.on{background:var(--accent-l);color:var(--accent)}
+.count.none{background:var(--no-l);color:var(--no)}
+.tags.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tags.grid2 .tag{min-height:52px;padding:8px 34px 8px 16px;font-size:14px;line-height:1.25}
+.tags.grid2 .tag.multi::after{right:10px}
+/* Revisión: una fila corta por marca con una sola etiqueta; tocar la fila lleva a corregirla. */
+.rlist{display:flex;flex-direction:column}
+.rrow{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:10px 0;border:0;border-bottom:1px solid var(--line);background:none;color:inherit;text-align:left;cursor:pointer}
+.rrow:last-child{border-bottom:0}
+.rname{flex:0 1 auto;max-width:45%;font-weight:800;line-height:1.2}
+.rlabels{flex:1 1 auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+.rlabels .pill{margin:0}
+.chev{flex:0 0 auto;color:var(--muted);font-size:22px;line-height:1}
+</style>
+</head>
+<body>
+<header class="top" id="topbar"><div class="top-in" id="top"></div></header>
+<main id="app"><div class="spinner" aria-label="Cargando"></div></main>
+<nav class="nav" id="nav" hidden><div class="nav-in" id="navin"></div></nav>
+
+<script>
+/* Valores por defecto. Dentro de Apps Script, al cargar se reemplazan por las marcas y
+   ofertas de la hoja Config (apiConfig en Code.gs). */
+var CFG = /*CFG*/{
+  "titulo": "Visita PDV",
+  "marcas": ["Savital", "Dove", "Sedal", "Nutribella", "Alma de Romero"],
+  "ofertas": ["2x1", "Pague 2 lleve 3", "Descuento 20%", "Combo shampoo + acondicionador", "Regalo por compra"],
+  "sinPromo": ["Nutribella", "Alma de Romero"],
+  "pdvs": [],
+  "equipo": "Equipo de ventas"
+}/*/CFG*/;
+
+var MOCK = (typeof google === 'undefined' || !google.script || !google.script.run);
+var KEY = 'pdv_visita_v3';
+var NINGUNA = 'Ninguna';
+var OTRA = 'Otra';
+var S = load() || fresh();
+var errs = {};
+
+function fresh(){ return { step:'pdv', vendedor:'', pdv:'', fecha:today(), ans:{}, id:null, result:null }; }
+function today(){ var d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function load(){ try{ var v = localStorage.getItem(KEY); return v ? JSON.parse(v) : null; }catch(e){ return null; } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function uuid(){ return 'v'+Date.now().toString(36)+Math.random().toString(36).slice(2,10); }
+function fmtFecha(iso){ if (!/^\d{4}-\d{2}-\d{2}$/.test(iso||'')) return iso||''; var x = iso.split('-'); return x[2]+'/'+x[1]+'/'+x[0]; }
+function A(m){ if (!S.ans[m]) S.ans[m] = {}; var a = S.ans[m]; if (!a.ofertas) a.ofertas = []; return a; }
+function presentes(){ return CFG.marcas.filter(function(m){ return A(m).presencia === 'Sí'; }); }
+/* Marcas sin promo (columna "Con promo" de Config): solo se pregunta presencia. */
+function tienePromo(m){ var k = String(m).trim().toLowerCase(); return !(CFG.sinPromo||[]).some(function(x){ return String(x).trim().toLowerCase() === k; }); }
+function conOfertas(){ return presentes().filter(tienePromo); }
+/* Ofertas que se envían para una marca: "Otra" se cambia por el texto escrito. */
+function ofertasDe(a){
+  if (a.presencia !== 'Sí') return [];
+  return (a.ofertas||[]).map(function(o){ return o === OTRA ? String(a.otra||'').replace(/,/g,' ').replace(/\s+/g,' ').trim() : o; }).filter(Boolean);
+}
+function reales(lista){ return lista.filter(function(o){ return o !== NINGUNA; }); }
+
+/* ---------- Llamadas al servidor ----------
+   1) Dentro de Apps Script: google.script.run → hoja Registros.
+   2) Publicada como página de Claude: base de datos compartida (colección "visitas").
+   3) Sin ninguna de las dos: simulación local en este navegador. */
+var DBP = null;
+function getDb(){
+  if (!DBP) DBP = (window.claude && typeof window.claude.use === 'function') ? window.claude.use('db').catch(function(){ return null; }) : Promise.resolve(null);
+  return DBP;
+}
+var MODE = MOCK ? 'mock' : 'gas';
+if (MOCK) getDb().then(function(db){ if (db){ MODE = 'db'; render(); } });
+
+function call(fn){
+  var args = Array.prototype.slice.call(arguments,1);
+  if (!MOCK) return new Promise(function(res, rej){
+    var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej);
+    r[fn].apply(r, args);
+  });
+  return getDb().then(function(db){ return (db ? remote(db) : mock)[fn].apply(null, args); });
+}
+function callRetry(fn, args, tries){
+  tries = tries || 3;
+  return call.apply(null,[fn].concat(args)).catch(function(e){
+    if (tries <= 1 || /inválid|Debes|Indica|permiso|lleno/.test(e && e.message)) throw e;
+    return new Promise(function(r){ setTimeout(r, 1500); }).then(function(){ return callRetry(fn, args, tries-1); });
+  });
+}
+
+/* Backend de la base de datos compartida: un documento por visita, id = idEnvio (los reintentos no duplican). */
+function pdvKey(s){ return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); }
+function dbErr(e){
+  var c = e && e.code;
+  if (c === 'invalid_argument') return new Error('No tienes permiso para guardar en esta encuesta. Pide al dueño acceso como Colaborador.');
+  if (c === 'quota_exceeded') return new Error('La base de datos de la encuesta está llena. Avísale al dueño.');
+  return new Error((e && e.message) || 'sin conexión');
+}
+function remote(db){
+  var col = db.collection('visitas');
+  return {
+    apiConfig: function(){
+      return col.limit(1000).get().then(function(snap){
+        var seen = {}, pdvs = CFG.pdvs.slice();
+        pdvs.forEach(function(p){ seen[pdvKey(p)] = 1; });
+        snap.docs.forEach(function(d){ var v = d.data() || {}; var k = pdvKey(v.pdv); if (v.pdv && !seen[k]){ seen[k] = 1; pdvs.push(String(v.pdv)); } });
+        return { marcas: CFG.marcas, ofertas: CFG.ofertas, sinPromo: CFG.sinPromo, pdvs: pdvs.sort(function(a,b){ return a.localeCompare(b,'es'); }) };
+      }).catch(function(e){ throw dbErr(e); });
+    },
+    apiSubmit: function(p){
+      var body = { idEnvio:p.idEnvio, vendedor:p.vendedor, pdv:p.pdv, pdvKey:pdvKey(p.pdv), fecha:p.fecha,
+        marcas: p.marcas.map(function(m){ return { marca:m.marca, presencia:!!m.presencia, ofertas:m.presencia ? m.ofertas : [] }; }),
+        creado: new Date().toISOString() };
+      return col.doc(p.idEnvio).set(body).then(function(){ return remote(db).apiResumenPDV(p.pdv); }, function(e){ throw dbErr(e); });
+    },
+    apiResumenPDV: function(pdv){
+      return col.where('pdvKey','==',pdvKey(pdv)).limit(1000).get().then(function(snap){
+        var regs = [];
+        snap.docs.forEach(function(d){
+          (d.data().marcas || []).forEach(function(m){ regs.push({ id:d.id, marca:m.marca, presencia:!!m.presencia, ofertas:m.ofertas || (m.oferta ? [m.oferta] : []) }); });
+        });
+        return acumulado(pdv, regs);
+      }).catch(function(e){ throw dbErr(e); });
+    }
+  };
+}
+
+/* Acumulado por marca (igual que apiResumenPDV en Code.gs). */
+function acumulado(pdv, regs){
+  var g = {}, visitas = {};
+  regs.forEach(function(r){
+    visitas[r.id] = 1;
+    var k = r.marca; if (!g[k]) g[k] = { marca:k, visitas:0, presencia:0, conOferta:0, ofertas:{} };
+    g[k].visitas++;
+    if (r.presencia){
+      g[k].presencia++;
+      var rs = reales(r.ofertas || []);
+      if (rs.length){ g[k].conOferta++; rs.forEach(function(o){ g[k].ofertas[o] = (g[k].ofertas[o]||0)+1; }); }
+    }
+  });
+  return { pdv: pdv, visitas: Object.keys(visitas).length, marcas: CFG.marcas.map(function(m){
+    var x = g[m] || { marca:m, visitas:0, presencia:0, conOferta:0, ofertas:{} }; x.sinPromo = !tienePromo(m); return x; }) };
+}
+
+/* Simulación para la vista previa: guarda en este navegador y calcula el acumulado igual que el servidor. */
+var mock = {
+  _rows: function(){ try{ return JSON.parse(localStorage.getItem(KEY+'_mock') || '[]'); }catch(e){ return []; } },
+  _save: function(rows){ try{ localStorage.setItem(KEY+'_mock', JSON.stringify(rows)); }catch(e){} },
+  apiConfig: function(){
+    var pdvs = CFG.pdvs.slice();
+    mock._rows().forEach(function(r){ if (pdvs.indexOf(r.pdv) === -1) pdvs.push(r.pdv); });
+    return { marcas: CFG.marcas, ofertas: CFG.ofertas, sinPromo: CFG.sinPromo, pdvs: pdvs.sort() };
+  },
+  apiSubmit: function(p){
+    var rows = mock._rows();
+    if (!rows.some(function(r){ return r.id === p.idEnvio; })) {
+      p.marcas.forEach(function(m){
+        rows.push({ id:p.idEnvio, fecha:p.fecha, pdv:p.pdv, marca:m.marca, presencia:!!m.presencia, ofertas: m.presencia ? m.ofertas : [] });
+      });
+      mock._save(rows);
+    }
+    return mock.apiResumenPDV(p.pdv);
+  },
+  apiResumenPDV: function(pdv){
+    var regs = mock._rows().filter(function(r){ return r.pdv.toLowerCase() === String(pdv).toLowerCase(); });
+    return acumulado(pdv, regs);
+  }
+};
+
+/* ---------- Render ---------- */
+var PASOS = ['presencia', 'ofertas', 'review'];
+var NOMBRE_PASO = { presencia:'Presencia', ofertas:'Ofertas', review:'Revisar' };
+/* Logo Unilever (blanco con fondo transparente) para la barra azul. */
+var LOGO = 'data:image/png;base64,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';
+function topbar(){
+  var h = '<div class="brand"><img class="logo" src="'+LOGO+'" alt="Unilever">'+esc(CFG.titulo)+(MODE==='mock'?' <span class="chip">VISTA PREVIA</span>':'')+'<small>'+esc(fmtFecha(S.fecha))+'</small></div>';
+  var i = PASOS.indexOf(S.step);
+  if (i !== -1) {
+    h += '<div class="bar">'+PASOS.map(function(p, j){ return '<span class="'+(j < i ? 'done' : (j === i ? 'on' : ''))+'"></span>'; }).join('')+'</div>';
+    h += '<div class="catline"><span>PDV '+esc(S.pdv)+'</span><span>'+NOMBRE_PASO[S.step]+' · paso '+(i+1)+' de '+PASOS.length+'</span></div>';
+  }
+  document.getElementById('top').innerHTML = h;
+}
+function nav(buttons){
+  var n = document.getElementById('nav');
+  if (!buttons || !buttons.length){ n.hidden = true; return; }
+  n.hidden = false;
+  document.getElementById('navin').innerHTML = buttons.map(function(b){
+    return '<button class="btn '+(b.ghost?'ghost':'')+'" data-act="'+b.act+'" '+(b.disabled?'disabled':'')+'>'+esc(b.label)+'</button>';
+  }).join('');
+}
+function render(){
+  topbar();
+  var f = { pdv:vPdv, presencia:vPresencia, ofertas:vOfertas, review:vReview, result:vResult }[S.step] || vPdv;
+  f();
+}
+function go(step){ S.step = step; errs = {}; save(); render(); window.scrollTo(0,0); }
+function app(h){ document.getElementById('app').innerHTML = h; }
+function msg(k){ return errs[k] ? '<p class="msg">'+esc(errs[k])+'</p>' : ''; }
+function blk(keys, inner, cls){ var bad = keys.some(function(k){ return errs[k]; }); return '<div class="block'+(cls?' '+cls:'')+(bad?' err':'')+'">'+inner+'</div>'; }
+function irAlError(){ var el = document.querySelector('.block.err'); if (el) el.scrollIntoView({behavior:'smooth', block:'center'}); }
+
+function vPdv(){
+  app('<h2>Código del PDV</h2><p class="sub">Escríbelo y empieza a registrar las marcas.</p>'+
+    blk(['_pdv'], '<label class="lbl" for="pdvq">Código</label><input class="field" id="pdvq" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ej. 104523" value="'+esc(S.pdv)+'">'+msg('_pdv')));
+  nav([{label:'Empezar', act:'pdvNext'}]);
+  var q = document.getElementById('pdvq');
+  q.addEventListener('input', function(){ S.pdv = q.value; save(); });
+  q.addEventListener('keydown', function(e){ if (e.key === 'Enter') ACT.pdvNext(); });
+}
+
+/* Paso 1: todas las marcas en una sola vista, Sí o No en cada una. */
+function vPresencia(){
+  var h = '<h2>¿Hay presencia de estas marcas?</h2><p class="sub">Marca Sí o No en cada una.</p>';
+  CFG.marcas.forEach(function(m){
+    var cur = A(m).presencia;
+    h += blk(['p:'+m], '<div class="prow"><span class="pname">'+esc(m)+(tienePromo(m) ? '' : '<small>Sin promo</small>')+'</span><div class="tags" role="radiogroup" aria-label="Presencia de '+esc(m)+'">'+
+      [{v:'Sí',c:'yes'},{v:'No',c:'no'}].map(function(o){
+        return '<button type="button" class="tag '+o.c+'" aria-pressed="'+(cur===o.v)+'" data-pres="'+esc(m)+'" data-v="'+o.v+'">'+o.v+'</button>';
+      }).join('')+'</div></div>'+msg('p:'+m), 'compact');
+  });
+  app(h);
+  nav([{label:'Código', act:'toPdv', ghost:true},{label:'Siguiente', act:'presNext'}]);
+}
+function validatePresencia(){
+  var e = {};
+  CFG.marcas.forEach(function(m){ if (!A(m).presencia) e['p:'+m] = 'Responde Sí o No.'; });
+  return e;
+}
+
+/* Paso 2: ofertas negociadas, solo para las marcas con presencia. Selección múltiple. */
+function vOfertas(){
+  var h = '<h2>Ofertas negociadas</h2><p class="sub">Elige todas las que negociaste en cada marca. Puedes marcar varias.</p>';
+  conOfertas().forEach(function(m, idx){
+    var a = A(m);
+    var n = a.ofertas.length, ning = a.ofertas.indexOf(NINGUNA) !== -1;
+    var cnt = ning ? '<span class="count none">Ninguna</span>'
+      : (n ? '<span class="count on">'+n+(n === 1 ? ' elegida' : ' elegidas')+'</span>' : '<span class="count">Sin elegir</span>');
+    var inner = '<div class="ofhead"><h3>'+esc(m)+'</h3>'+cnt+'</div><div class="tags grid2" role="group" aria-label="Ofertas de '+esc(m)+'">'+
+      CFG.ofertas.concat([OTRA, NINGUNA]).map(function(o){
+        var on = a.ofertas.indexOf(o) !== -1;
+        return '<button type="button" class="tag multi'+(o===NINGUNA?' no':'')+'" aria-pressed="'+on+'" data-of="'+esc(m)+'" data-v="'+esc(o)+'">'+esc(o)+'</button>';
+      }).join('')+'</div>'+msg('o:'+m);
+    if (a.ofertas.indexOf(OTRA) !== -1) {
+      inner += '<label class="lbl" for="otra'+idx+'" style="margin-top:10px">Describe la otra oferta</label>'+
+        '<input class="field" id="otra'+idx+'" data-otra="'+esc(m)+'" placeholder="Ej. Descuento 15% en combo" value="'+esc(a.otra||'')+'">'+msg('t:'+m);
+    }
+    h += blk(['o:'+m, 't:'+m], inner);
+  });
+  app(h);
+  nav([{label:'Presencia', act:'toPres', ghost:true},{label:'Revisar y enviar', act:'ofNext'}]);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-otra]'), function(inp){
+    inp.addEventListener('input', function(){ A(inp.dataset.otra).otra = inp.value; save(); });
+  });
+}
+function validateOfertas(){
+  var e = {};
+  conOfertas().forEach(function(m){
+    var a = A(m);
+    if (!a.ofertas.length) e['o:'+m] = 'Elige al menos una oferta, o "'+NINGUNA+'".';
+    else if (a.ofertas.indexOf(OTRA) !== -1 && !String(a.otra||'').trim()) e['t:'+m] = 'Describe la otra oferta.';
+  });
+  return e;
+}
+
+function vReview(){
+  var h = '<h2>Revisar y enviar</h2><p class="sub">PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p>';
+  var conPres = 0, conOf = 0, filas = '';
+  CFG.marcas.forEach(function(m){
+    var a = A(m), pres = a.presencia === 'Sí', promo = tienePromo(m), ofs = promo ? reales(ofertasDe(a)) : [];
+    if (pres) conPres++;
+    if (ofs.length) conOf++;
+    var pills = !pres ? '<span class="pill no">Sin presencia</span>'
+      : (!promo ? '<span class="pill yes">Presente · sin promo</span>'
+        : (ofs.length ? ofs.map(function(o){ return '<span class="pill yes">'+esc(o)+'</span>'; }).join('') : '<span class="pill yes">Presente · sin oferta</span>'));
+    filas += '<button type="button" class="rrow" data-act="'+(pres && promo ? 'toOf' : 'toPres')+'" aria-label="Corregir '+esc(m)+'">'+
+      '<span class="rname">'+esc(m)+'</span><span class="rlabels">'+pills+'</span><span class="chev" aria-hidden="true">›</span></button>';
+  });
+  h += '<div class="block"><div class="rlist">'+filas+'</div><p class="hint" style="margin:8px 0 0">Toca una marca para corregirla.</p></div>';
+  h += '<div class="block"><p style="margin:0">Presencia en <b>'+conPres+' de '+CFG.marcas.length+'</b> marcas y oferta negociada en <b>'+conOf+'</b>. Después de enviar ya no podrás editar esta visita.</p></div><div id="sendmsg"></div>';
+  app(h);
+  nav([{label:'Anterior', act:'backFromReview', ghost:true},{label:'Enviar visita', act:'send'}]);
+}
+
+function buildPayload(){
+  if (!S.id) { S.id = uuid(); save(); }
+  return { idEnvio:S.id, vendedor:'', pdv:S.pdv.trim(), fecha:S.fecha,
+    marcas: CFG.marcas.map(function(m){ var a = A(m); return { marca:m, presencia:a.presencia==='Sí', ofertas:tienePromo(m) ? ofertasDe(a) : [] }; }) };
+}
+
+function vResult(){
+  var r = S.result;
+  if (!r || !r.marcas){ go('pdv'); return; }
+  var presHoy = presentes().length;
+  var h = '<div class="hero-score"><div class="eyebrow" style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.8">Visita guardada</div>'+
+    '<div class="big">'+presHoy+'<small> de '+CFG.marcas.length+' marcas con presencia</small></div><p>PDV '+esc(S.pdv)+' · '+esc(fmtFecha(S.fecha))+'</p></div>';
+  h += '<h2>Acumulado en este PDV</h2><p class="sub">'+r.visitas+' visita'+(r.visitas===1?'':'s')+' registrada'+(r.visitas===1?'':'s')+' en total.</p><div class="block"><ul class="shelf">';
+  r.marcas.forEach(function(x){
+    var ofs = Object.keys(x.ofertas).sort(function(a,b){ return x.ofertas[b]-x.ofertas[a]; }).map(function(k){ return esc(k)+' ×'+x.ofertas[k]; });
+    var pct = x.visitas ? Math.round(x.presencia/x.visitas*100) : 0;
+    h += '<li><div class="top-row"><span>'+esc(x.marca)+'</span><span>Presencia '+x.presencia+' de '+x.visitas+'</span></div>'+
+      '<div class="meter"><i style="width:'+Math.max(2, pct)+'%"></i></div>'+
+      '<div class="comp">'+(x.sinPromo ? '<span>Sin promo</span>'
+        : '<span>Oferta negociada '+x.conOferta+' de '+x.visitas+'</span>'+(ofs.length?'<span>'+ofs.join(' · ')+'</span>':''))+'</div></li>';
+  });
+  h += '</ul></div>';
+  app(h);
+  nav([{label:'Registrar otro PDV', act:'another'}]);
+}
+
+/* ---------- Eventos ---------- */
+function rerender(){ var y = window.scrollY; save(); render(); window.scrollTo(0,y); }
+document.addEventListener('click', function(ev){
+  var t = ev.target.closest('button,[data-act]'); if (!t) return;
+  if (t.dataset.pres){
+    var a = A(t.dataset.pres); a.presencia = t.dataset.v;
+    if (a.presencia === 'No'){ a.ofertas = []; delete a.otra; }
+    delete errs['p:'+t.dataset.pres]; rerender(); return;
+  }
+  if (t.dataset.of){
+    var m = t.dataset.of, b = A(m), v = t.dataset.v, i = b.ofertas.indexOf(v);
+    if (i !== -1) b.ofertas.splice(i, 1);
+    else if (v === NINGUNA) b.ofertas = [NINGUNA];            // "Ninguna" excluye las demás
+    else { b.ofertas = b.ofertas.filter(function(o){ return o !== NINGUNA; }); b.ofertas.push(v); }
+    if (b.ofertas.indexOf(OTRA) === -1) delete b.otra;
+    delete errs['o:'+m]; delete errs['t:'+m]; rerender(); return;
+  }
+  var act = t.dataset.act; if (act && ACT[act]) ACT[act](t);
+});
+
+var ACT = {
+  pdvNext: function(){
+    S.pdv = String(S.pdv||'').trim().toUpperCase();
+    if (!S.pdv){ errs = {_pdv:'Escribe el código del PDV.'}; render(); return; }
+    S.fecha = today(); go('presencia');
+  },
+  toPdv: function(){ go('pdv'); },
+  toPres: function(){ go('presencia'); },
+  toOf: function(){ go('ofertas'); },
+  presNext: function(){
+    errs = validatePresencia();
+    if (Object.keys(errs).length){ render(); irAlError(); return; }
+    go(conOfertas().length ? 'ofertas' : 'review');
+  },
+  ofNext: function(){
+    errs = validateOfertas();
+    if (Object.keys(errs).length){ render(); irAlError(); return; }
+    go('review');
+  },
+  backFromReview: function(){ go(conOfertas().length ? 'ofertas' : 'presencia'); },
+  send: function(btn){
+    if (Object.keys(validatePresencia()).length){ go('presencia'); ACT.presNext(); return; }
+    if (Object.keys(validateOfertas()).length){ go('ofertas'); ACT.ofNext(); return; }
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    callRetry('apiSubmit', [buildPayload()]).then(function(r){ S.result = r; go('result'); })
+      .catch(function(e){
+        btn.disabled = false; btn.textContent = 'Reintentar envío';
+        document.getElementById('sendmsg').innerHTML = '<div class="note">No se pudo enviar: '+esc(e && e.message || 'sin conexión')+'. Tus respuestas siguen guardadas en este celular. Revisa tu conexión y vuelve a intentar.</div>';
+      });
+  },
+  another: function(){ S = fresh(); save(); render(); window.scrollTo(0,0); }
+};
+
+render();
+
+/* Dentro de Apps Script: toma marcas y ofertas de la hoja Config. */
+if (!MOCK) callRetry('apiConfig', []).then(function(c){
+  var cambio = false;
+  if (c && c.marcas && c.marcas.length && c.marcas.join('|') !== CFG.marcas.join('|')) { CFG.marcas = c.marcas; cambio = true; }
+  if (c && c.ofertas && c.ofertas.length && c.ofertas.join('|') !== CFG.ofertas.join('|')) { CFG.ofertas = c.ofertas; cambio = true; }
+  if (c && Array.isArray(c.sinPromo) && c.sinPromo.join('|') !== (CFG.sinPromo||[]).join('|')) { CFG.sinPromo = c.sinPromo; cambio = true; }
+  if (cambio) render();
+}).catch(function(){});
+</script>
+</body>
+</html>

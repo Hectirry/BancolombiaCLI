@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Salida Barranquilla</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Layout: una pantalla por bloque del cuestionario, barra superior fija con el avance, botones fijos abajo. */
+:root{
+  --bg:#F2F4FB; --paper:#FFFFFF; --ink:#0B1340; --muted:#5A6283; --line:#D6DBEE;
+  --accent:#1A23B8; --accent-d:#08079A; --accent-l:#E6E8FA;
+  --no:#C8372D; --no-l:#FBE7E4; --warn:#F0B33E; --warn-l:#FFF5DB;
+  --f:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#0B0E24; --paper:#151A3A; --ink:#E7EAFB; --muted:#A3A9CC; --line:#2A3160;
+  --accent:#4D5BF0; --accent-d:#1B1E7A; --accent-l:#1E2457;
+  --no:#F0805F; --no-l:#3A1F18; --warn:#F2C25E; --warn-l:#3A2E12; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0B0E24; --paper:#151A3A; --ink:#E7EAFB; --muted:#A3A9CC; --line:#2A3160;
+  --accent:#4D5BF0; --accent-d:#1B1E7A; --accent-l:#1E2457;
+  --no:#F0805F; --no-l:#3A1F18; --warn:#F2C25E; --warn-l:#3A2E12; color-scheme:dark }
+
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--warn);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--accent-d)}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--accent-d);color:#fff;
+  padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top-in{max-width:640px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-.01em}
+.brand small{font-weight:600;opacity:.8;font-size:13px;margin-left:auto;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{display:inline-block;background:var(--warn);color:#3A2300;font-weight:800;font-size:11px;letter-spacing:.04em;border-radius:6px;padding:3px 8px}
+.bar{display:flex;gap:6px;margin-top:10px}
+.bar span{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.22)}
+.bar span.on{background:#fff}.bar span.done{background:#9FB1FF}
+
+main{max-width:640px;margin:0 auto;padding-block:20px 130px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h2{font-size:22px;line-height:1.2;margin:4px 0 4px;font-weight:800;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 16px}
+p{margin:0 0 12px}
+
+.block{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:0 0 10px}
+.block.err{border-color:var(--no);box-shadow:0 0 0 2px var(--no-l)}
+.lbl{font-size:13px;color:var(--muted);font-weight:700;margin:0 0 6px;display:block}
+.q{font-weight:700;font-size:15px;margin:14px 0 8px}
+.msg{color:var(--no);font-size:14px;font-weight:700;margin:8px 0 0}
+.field{display:block;width:100%;min-height:48px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--paper);color:var(--ink)}
+.field:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-l)}
+textarea.field{min-height:76px;resize:vertical}
+
+/* Botones de opción */
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{position:relative;flex:1 1 130px;min-height:46px;border:1.5px solid var(--line);background:var(--paper);border-radius:6px 12px 12px 6px;
+  padding:9px 12px 9px 20px;text-align:left;font-weight:700;cursor:pointer}
+.tag::before{content:"";position:absolute;left:0;top:0;bottom:0;width:8px;border-radius:5px 0 0 5px;background:var(--line)}
+.tag[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-l)}
+.tag[aria-pressed="true"]::before{background:var(--accent)}
+
+/* Filas Sí/No: nombre a la izquierda, botones a la derecha */
+.rows{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:0 0 10px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px 10px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row.err{background:var(--no-l)}
+.row .name{font-weight:700;min-width:0}
+.row .name small{display:block;font-weight:600;color:var(--muted);font-size:13px;line-height:1.3}
+.row .msg{grid-column:1/-1;margin:0}
+.yn{display:flex;gap:6px}
+.yn button{min-width:58px;min-height:44px;border-radius:10px;border:1.5px solid var(--line);background:var(--paper);font-weight:800;cursor:pointer}
+.yn button[aria-pressed="true"].si{background:var(--accent);border-color:var(--accent);color:#fff}
+.yn button[aria-pressed="true"].no{background:var(--no);border-color:var(--no);color:#fff}
+.extra{grid-column:1/-1;display:flex;align-items:center;gap:10px}
+.extra label{font-size:14px;font-weight:700;color:var(--muted)}
+.extra .field{max-width:120px;min-height:44px;text-align:center;font-weight:800;font-variant-numeric:tabular-nums}
+
+/* Navegación */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--bg);border-top:1px solid var(--line);
+  padding-block:12px calc(12px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.nav-in{max-width:640px;margin:0 auto;display:flex;gap:10px}
+.btn{min-height:52px;border-radius:12px;border:0;padding:0 18px;font-weight:800;cursor:pointer;background:var(--accent);color:#fff;flex:2}
+.btn:active{background:var(--accent-d)}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line);flex:1}
+.btn[disabled]{opacity:.55;cursor:wait}
+
+/* Revisión */
+.rev{display:block;width:100%;text-align:left;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0 0 10px;cursor:pointer}
+.rev .t{display:flex;justify-content:space-between;gap:10px;font-weight:800}
+.rev .t span:last-child{color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rev .d{color:var(--muted);font-size:14px;margin-top:4px}
+
+.saved{background:linear-gradient(160deg,var(--accent) 0%,var(--accent-d) 100%);color:#fff;border-radius:18px;padding:22px 20px;margin:0 0 14px}
+.saved .eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+.saved .big{font-size:30px;line-height:1.15;font-weight:800;margin-top:6px;overflow-wrap:anywhere}
+.saved p{opacity:.85;margin:6px 0 0}
+.note{background:var(--warn-l);border:1px solid var(--warn);border-radius:12px;padding:12px 14px;font-size:14px;margin:0 0 12px}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in" id="top"></div></header>
+<main id="app"></main>
+<nav class="nav" id="nav" hidden><div class="nav-in" id="navin"></div></nav>
+
+<script>
+/* Cuestionario por defecto. Dentro de Apps Script se reemplaza al cargar por el de Code.gs (apiConfig). */
+var CFG = {
+  titulo: 'Salida Barranquilla',
+  canales: ['Tienda tradicional', 'Minimercado', 'Autoservicio', 'Droguería', 'Mayorista'],
+  secciones: [
+    { id:'innov', titulo:'Portafolio de innovaciones', pregunta:'¿Se tiene presencia del portafolio?', items:[
+      {id:'hera',nombre:'Hera'},{id:'yellow',nombre:'Yellow'},{id:'dalia',nombre:'Dalia'},
+      {id:'tse',nombre:'Tratamiento sin enjuague'},{id:'bbq',nombre:'BBQ Ahumada'},{id:'milo',nombre:'Natilla Milo'}]},
+    { id:'exhib', titulo:'Estrategias de exhibición', pregunta:'¿Se ve la estrategia en el punto de venta?', items:[
+      {id:'sdse',nombre:'SDS+E',detalle:'Exhibición en Cabello con la estrategia SDS+E'},
+      {id:'sat1',nombre:'SAT+1',detalle:'Lineales de cabello'},
+      {id:'tmb1',nombre:'TMB+1',detalle:'Lineales de salsas'},
+      {id:'hm',nombre:'H&M',detalle:'Lineales de desodorantes'}]},
+    { id:'hair', titulo:'Portafolio Hair', pregunta:'¿Se tiene presencia de producto de la marca?', items:[
+      {id:'savital',nombre:'Savital'},{id:'dove',nombre:'Dove'},{id:'sedal',nombre:'Sedal'},{id:'ego',nombre:'Ego'},
+      {id:'nutribella',nombre:'Nutribella',caras:true},{id:'almaderomero',nombre:'Alma de Romero',caras:true},{id:'hys',nombre:'H&S',caras:true}]}
+  ]
+};
+var OTRO = 'Otro';
+var MOCK = (typeof google === 'undefined' || !google.script || !google.script.run);
+var KEY = 'salida_bq_v1';
+var S = load() || fresh();
+var errs = {};
+
+function fresh(){ return { step:'cliente', cliente:'', canal:'', canalOtro:'', resp:{}, caras:{}, pop:'', popDetalle:'', id:null, fecha:today() }; }
+function today(){ var d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function load(){ try{ var v = localStorage.getItem(KEY); return v ? JSON.parse(v) : null; }catch(e){ return null; } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function fmtFecha(iso){ var x = String(iso||'').split('-'); return x.length === 3 ? x[2]+'/'+x[1]+'/'+x[0] : iso; }
+function uuid(){ return 'v'+Date.now().toString(36)+Math.random().toString(36).slice(2,10); }
+function canal(){ return S.canal === OTRO ? String(S.canalOtro||'').trim() : S.canal; }
+
+/* Pasos: cliente, una pantalla por sección, POP, revisar. */
+function pasos(){ return ['cliente'].concat(CFG.secciones.map(function(s){ return 's:'+s.id; })).concat(['pop','review']); }
+function seccion(id){ for (var i=0;i<CFG.secciones.length;i++) if (CFG.secciones[i].id === id) return CFG.secciones[i]; return null; }
+
+/* ---------- Servidor (Apps Script) o simulación local ---------- */
+function call(fn){
+  var args = Array.prototype.slice.call(arguments,1);
+  if (MOCK) return Promise.resolve().then(function(){ return mock[fn].apply(null, args); });
+  return new Promise(function(res, rej){ var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej); r[fn].apply(r, args); });
+}
+function callRetry(fn, args, tries){
+  tries = tries || 3;
+  return call.apply(null,[fn].concat(args)).catch(function(e){
+    if (tries <= 1 || /Debes|Falta|Indica/.test(e && e.message)) throw e;
+    return new Promise(function(r){ setTimeout(r, 1500); }).then(function(){ return callRetry(fn, args, tries-1); });
+  });
+}
+var mock = {
+  apiConfig: function(){ return CFG; },
+  apiSubmit: function(p){
+    var rows; try{ rows = JSON.parse(localStorage.getItem(KEY+'_mock') || '[]'); }catch(e){ rows = []; }
+    if (rows.some(function(r){ return r.idEnvio === p.idEnvio; })) return { duplicado:true };
+    rows.push(p); try{ localStorage.setItem(KEY+'_mock', JSON.stringify(rows)); }catch(e){}
+    return { duplicado:false };
+  }
+};
+
+/* ---------- Pantallas ---------- */
+function app(h){ document.getElementById('app').innerHTML = h; }
+function nav(btns){
+  var n = document.getElementById('nav');
+  if (!btns){ n.hidden = true; return; }
+  n.hidden = false;
+  document.getElementById('navin').innerHTML = btns.map(function(b){ return '<button class="btn'+(b.ghost?' ghost':'')+'" data-act="'+b.act+'">'+esc(b.label)+'</button>'; }).join('');
+}
+function topbar(){
+  var p = pasos(), i = p.indexOf(S.step);
+  var h = '<div class="brand"><span>'+esc(CFG.titulo)+'</span>'+(MOCK?' <span class="chip">VISTA PREVIA</span>':'')+'<small>'+esc(S.cliente ? S.cliente : fmtFecha(S.fecha))+'</small></div>';
+  if (i >= 0) h += '<div class="bar">'+p.slice(0,-1).map(function(_,k){ return '<span class="'+(k<i?'done':(k===i?'on':''))+'"></span>'; }).join('')+'</div>';
+  document.getElementById('top').innerHTML = h;
+}
+function render(){
+  topbar();
+  if (S.step === 'cliente') return vCliente();
+  if (S.step.indexOf('s:') === 0) return vSeccion(seccion(S.step.slice(2)));
+  if (S.step === 'pop') return vPop();
+  if (S.step === 'review') return vReview();
+  if (S.step === 'done') return vDone();
+  S.step = 'cliente'; vCliente();
+}
+function go(step){ S.step = step; errs = {}; save(); render(); window.scrollTo(0,0); }
+function next(){ var p = pasos(); go(p[Math.min(p.indexOf(S.step)+1, p.length-1)]); }
+function prev(){ var p = pasos(); go(p[Math.max(p.indexOf(S.step)-1, 0)]); }
+function msg(k){ return errs[k] ? '<p class="msg">'+esc(errs[k])+'</p>' : ''; }
+
+function vCliente(){
+  var opts = CFG.canales.concat([OTRO]);
+  app('<h2>Cliente</h2><p class="sub">'+esc(fmtFecha(S.fecha))+'</p>'+
+    '<div class="block'+(errs.cliente?' err':'')+'"><label class="lbl" for="cli">Nombre o código del cliente</label>'+
+      '<input class="field" id="cli" autocomplete="off" placeholder="Ej. 104523 · Tienda La Esquina" value="'+esc(S.cliente)+'">'+msg('cliente')+'</div>'+
+    '<div class="block'+(errs.canal?' err':'')+'"><p class="lbl" style="margin-bottom:8px">Canal para visitar</p><div class="tags" role="radiogroup" aria-label="Canal">'+
+      opts.map(function(o){ return '<button type="button" class="tag" aria-pressed="'+(S.canal===o)+'" data-canal="'+esc(o)+'">'+esc(o)+'</button>'; }).join('')+'</div>'+
+      (S.canal === OTRO ? '<label class="lbl" for="cotro" style="margin-top:12px">¿Cuál canal?</label><input class="field" id="cotro" value="'+esc(S.canalOtro)+'">' : '')+
+      msg('canal')+'</div>');
+  nav([{label:'Empezar', act:'next'}]);
+  var c = document.getElementById('cli'); c.addEventListener('input', function(){ S.cliente = c.value; save(); });
+  var o = document.getElementById('cotro'); if (o) o.addEventListener('input', function(){ S.canalOtro = o.value; save(); });
+}
+
+function ynRow(key, nombre, detalle, conCaras){
+  var v = S.resp[key];
+  var h = '<div class="row'+(errs[key]?' err':'')+'"><div class="name">'+esc(nombre)+(detalle?'<small>'+esc(detalle)+'</small>':'')+'</div>'+
+    '<div class="yn" role="radiogroup" aria-label="'+esc(nombre)+'">'+
+      '<button type="button" class="si" aria-pressed="'+(v==='Sí')+'" data-k="'+esc(key)+'" data-v="Sí">Sí</button>'+
+      '<button type="button" class="no" aria-pressed="'+(v==='No')+'" data-k="'+esc(key)+'" data-v="No">No</button></div>';
+  if (conCaras && v === 'Sí') h += '<div class="extra"><label for="c_'+esc(key)+'">¿Cuántas caras?</label><input class="field" type="number" inputmode="numeric" min="1" step="1" id="c_'+esc(key)+'" data-caras="'+esc(key)+'" value="'+esc(S.caras[key]==null?'':S.caras[key])+'"></div>';
+  return h + msg(key) + '</div>';
+}
+
+function vSeccion(s){
+  app('<h2>'+esc(s.titulo)+'</h2><p class="sub">'+esc(s.pregunta)+'</p><div class="rows">'+
+    s.items.map(function(it){ return ynRow(s.id+'.'+it.id, it.nombre, it.detalle, it.caras); }).join('')+'</div>');
+  nav([{label:'Anterior', act:'prev', ghost:true},{label:'Siguiente', act:'next'}]);
+}
+
+function vPop(){
+  app('<h2>Material POP</h2><p class="sub">Material publicitario en el punto de venta.</p><div class="rows">'+ynRow('pop', '¿Se tiene POP en el punto de venta?')+'</div>'+
+    (S.resp.pop === 'Sí' ? '<div class="block'+(errs.popDetalle?' err':'')+'"><label class="lbl" for="popd">¿De qué categoría, marca o producto se encontró POP?</label>'+
+      '<textarea class="field" id="popd" placeholder="Ej. Hair · Sedal · afiche en la entrada">'+esc(S.popDetalle)+'</textarea>'+msg('popDetalle')+'</div>' : ''));
+  nav([{label:'Anterior', act:'prev', ghost:true},{label:'Revisar', act:'next'}]);
+  var d = document.getElementById('popd'); if (d) d.addEventListener('input', function(){ S.popDetalle = d.value; save(); });
+}
+
+function vReview(){
+  var h = '<h2>Revisar y enviar</h2><p class="sub">'+esc(S.cliente)+' · '+esc(canal())+' · '+esc(fmtFecha(S.fecha))+'</p>';
+  CFG.secciones.forEach(function(s){
+    var si = s.items.filter(function(it){ return S.resp[s.id+'.'+it.id] === 'Sí'; });
+    var det = si.length ? si.map(function(it){ var c = S.caras[s.id+'.'+it.id]; return it.nombre + (it.caras ? ' ('+c+' caras)' : ''); }).join(', ') : 'Ninguno';
+    h += '<button type="button" class="rev" data-goto="s:'+esc(s.id)+'"><div class="t"><span>'+esc(s.titulo)+'</span><span>'+si.length+' de '+s.items.length+' Sí</span></div><div class="d">'+esc(det)+'</div></button>';
+  });
+  h += '<button type="button" class="rev" data-goto="pop"><div class="t"><span>Material POP</span><span>'+esc(S.resp.pop)+'</span></div>'+
+    (S.resp.pop === 'Sí' ? '<div class="d">'+esc(S.popDetalle)+'</div>' : '')+'</button>';
+  h += '<p class="sub" style="margin-top:6px">Toca un bloque para corregirlo. Después de enviar ya no podrás editar esta visita.</p><div id="sendmsg"></div>';
+  app(h);
+  nav([{label:'Anterior', act:'prev', ghost:true},{label:'Enviar visita', act:'send'}]);
+}
+
+function vDone(){
+  app('<div class="saved"><div class="eyebrow">Visita guardada</div><div class="big">'+esc(S.cliente)+'</div><p>'+esc(canal())+' · '+esc(fmtFecha(S.fecha))+'</p></div>'+
+    (MOCK ? '<div class="note"><b>Vista previa.</b> Esta visita quedó solo en este navegador. En la versión de Google llega a la hoja Registros.</div>' : ''));
+  nav([{label:'Registrar otro cliente', act:'otro'}]);
+}
+
+/* ---------- Validación ---------- */
+function validar(step){
+  var e = {};
+  if (step === 'cliente'){
+    if (!String(S.cliente||'').trim()) e.cliente = 'Escribe el nombre o código del cliente.';
+    if (!S.canal) e.canal = 'Elige el canal.';
+    else if (S.canal === OTRO && !String(S.canalOtro||'').trim()) e.canal = 'Escribe cuál canal.';
+  } else if (step.indexOf('s:') === 0){
+    var s = seccion(step.slice(2));
+    s.items.forEach(function(it){
+      var k = s.id+'.'+it.id, v = S.resp[k];
+      if (!v) e[k] = 'Responde Sí o No.';
+      else if (it.caras && v === 'Sí'){ var c = Number(S.caras[k]); if (!(c >= 1) || c % 1) e[k] = 'Escribe cuántas caras (número entero desde 1).'; }
+    });
+  } else if (step === 'pop'){
+    if (!S.resp.pop) e.pop = 'Responde Sí o No.';
+    else if (S.resp.pop === 'Sí' && !String(S.popDetalle||'').trim()) e.popDetalle = 'Escribe de qué categoría, marca o producto es el POP.';
+  }
+  return e;
+}
+function primerPasoConError(){ var p = pasos(); for (var i=0;i<p.length-1;i++){ if (Object.keys(validar(p[i])).length) return p[i]; } return null; }
+
+function payload(){
+  if (!S.id){ S.id = uuid(); save(); }
+  var resp = {}, caras = {};
+  CFG.secciones.forEach(function(s){ s.items.forEach(function(it){
+    var k = s.id+'.'+it.id; resp[k] = S.resp[k];
+    if (it.caras && S.resp[k] === 'Sí') caras[k] = Number(S.caras[k]);
+  }); });
+  return { idEnvio:S.id, fecha:S.fecha, cliente:String(S.cliente).trim(), canal:canal(), respuestas:resp, caras:caras,
+    pop:S.resp.pop, popDetalle: S.resp.pop === 'Sí' ? String(S.popDetalle).trim() : '' };
+}
+
+/* ---------- Eventos ---------- */
+var ACT = {
+  next: function(){
+    errs = validar(S.step);
+    if (Object.keys(errs).length){ render(); var el = document.querySelector('.err'); if (el) el.scrollIntoView({behavior:'smooth', block:'center'}); return; }
+    if (S.step === 'cliente') S.cliente = String(S.cliente).trim();
+    next();
+  },
+  prev: prev,
+  send: function(btn){
+    var mal = primerPasoConError();
+    if (mal){ go(mal); ACT.next(); return; }
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    callRetry('apiSubmit', [payload()]).then(function(){ go('done'); }).catch(function(e){
+      btn.disabled = false; btn.textContent = 'Reintentar envío';
+      document.getElementById('sendmsg').innerHTML = '<div class="note">No se pudo enviar: '+esc(e && e.message || 'sin conexión')+'. Tus respuestas siguen guardadas en este celular. Revisa la conexión y vuelve a intentar.</div>';
+    });
+  },
+  otro: function(){ S = fresh(); save(); render(); window.scrollTo(0,0); }
+};
+
+document.addEventListener('click', function(ev){
+  var t = ev.target.closest('button'); if (!t) return;
+  if (t.dataset.k){
+    var k = t.dataset.k;
+    S.resp[k] = t.dataset.v;
+    if (t.dataset.v === 'No'){ delete S.caras[k]; }
+    delete errs[k]; if (k === 'pop') delete errs.popDetalle;
+    save(); var y = window.scrollY; render(); window.scrollTo(0,y);
+    var c = t.dataset.v === 'Sí' && document.getElementById('c_'+k); if (c && !c.value) c.focus();
+    return;
+  }
+  if (t.dataset.canal){ S.canal = t.dataset.canal; delete errs.canal; save(); render(); var o = document.getElementById('cotro'); if (o) o.focus(); return; }
+  if (t.dataset.goto){ go(t.dataset.goto); return; }
+  var a = t.dataset.act; if (a && ACT[a]) ACT[a](t);
+});
+document.addEventListener('input', function(ev){
+  var t = ev.target; if (!t.dataset || !t.dataset.caras) return;
+  S.caras[t.dataset.caras] = t.value; save();
+});
+
+render();
+
+/* Dentro de Apps Script: toma el cuestionario y los canales del servidor. */
+if (!MOCK) callRetry('apiConfig', []).then(function(c){
+  if (!c) return;
+  var antes = JSON.stringify([CFG.canales, CFG.secciones]);
+  if (c.canales && c.canales.length) CFG.canales = c.canales;
+  if (c.secciones && c.secciones.length) CFG.secciones = c.secciones;
+  if (c.titulo) CFG.titulo = c.titulo;
+  if (JSON.stringify([CFG.canales, CFG.secciones]) !== antes){ if (pasos().indexOf(S.step) < 0 && S.step !== 'done') S.step = 'cliente'; render(); }
+}).catch(function(){});
+</script>
+</body>
+</html>
