@@ -130,6 +130,7 @@ a tiebreak.
 | Area | What it would catch | Status |
 | --- | --- | --- |
 | Frequentist uniformity (χ², Monte Carlo p, without-replacement correction) | a loaded ball | TESTED `stats`: 7/7 compatible with fair; Súper χ²(15)=14.6, p=0.48 |
+| Memory of absence ("due" numbers: are those absent longer likelier?) | overdue or recently-seen numbers being favoured | TESTED `stats` `due-numbers`, **corrected 2026-11-16**: the statistic is now the mean overdue mid-rank of the drawn numbers, exactly 22 on a fair machine — Baloto 22.18 (p = 0.29), Revancha 22.01 (p = 0.96), 992 draws each. Until then it was the mean gap between appearances, which telescopes to Σ(last − first)/(5n − 43): a function of how the history begins and ends, blind to the rest (identity checked to 1e-9 on both machines). It flagged Revancha at p = 0.0024 because all 43 numbers appeared in its first 20 draws of 2018 (Σ first index 238 against 327 ± 36, p = 0.004) — a fact about January–March 2018, not about overdue numbers. Gap variance over the whole history: Baloto z −0.98, Revancha +0.56. |
 | Bayesian conjugate (Dirichlet posterior, simultaneous credible intervals) | a ball whose rate excludes 1/16 | TESTED `superball`: all 16 intervals cover 1/16 after `SIMULTANEOUS_Z` |
 | Multiple-comparison control (Holm, Bonferroni) | false positives from scanning 43×19 features | TESTED `profile`: 38 comparisons, none survive |
 | Walk-forward / holdout validation | overfitting of any rule | ENTERED: the discipline every tournament uses |
@@ -152,6 +153,9 @@ a tiebreak.
 
 Two independent hints point the same way — the main numbers are slightly
 *too* uniform (Pearson percentile 2.9 %, compressibility percentile 98.7 %).
+A third hint of the same flavour sits on the other machine: Revancha showed
+all 43 numbers within its first 20 draws of 2018 (p ≈ 0.004), which is what
+the old `due-numbers` statistic was really reading.
 That is a watch item, not a lever: over-uniformity cannot be bet on.
 
 ### Time series & signal processing

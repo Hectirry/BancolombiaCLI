@@ -115,24 +115,47 @@ function overlapStatistic(mains: number[][]): number {
 }
 
 /**
- * "Due number" test: if numbers that have been absent for a long time were more
- * likely to come up, the average dry spell of the numbers actually drawn would
- * be longer than chance predicts.
+ * "Due number" test: the average overdue rank of the numbers that come out.
+ *
+ * Before each draw the numbers are ranked by how long they have been absent
+ * (1 = seen most recently, `pool` = absent longest; ties share the mean of
+ * their ranks, and a number never seen yet counts as absent longest). A fair
+ * machine draws without regard to that order, so the ranks of the drawn
+ * numbers average exactly (pool + 1) / 2 — 22 for 43 balls. A machine that
+ * favours overdue numbers pushes the average up; one that repeats recent
+ * numbers pushes it down.
+ *
+ * Until 2026-11-16 this was the mean gap between a number's appearances,
+ * which does not test the question: one number's gaps telescope to (last
+ * appearance − first appearance), so that mean was a function of how the
+ * history begins and ends and blind to everything in between. It flagged
+ * Revancha (p = 0.002) for having shown all 43 numbers in its first 20 draws
+ * of 2018, which says nothing about overdue numbers.
  */
-function dueStatistic(mains: number[][], pool: number): number {
-  const lastSeen = new Array(pool).fill(-1);
+export function dueStatistic(mains: number[][], pool: number): number {
+  const lastSeen = new Int32Array(pool).fill(-1);
   let total = 0;
   let counted = 0;
-  mains.forEach((main, i) => {
-    for (const n of main) {
-      if (lastSeen[n - 1]! >= 0) {
-        total += i - lastSeen[n - 1]!;
+  for (let i = 0; i < mains.length; i++) {
+    const main = mains[i]!;
+    // The first draw has no past to rank against.
+    if (i > 0) {
+      for (const n of main) {
+        const mine = lastSeen[n - 1]!;
+        let moreRecent = 0;
+        let tied = 0;
+        for (let k = 0; k < pool; k++) {
+          const other = lastSeen[k]!;
+          if (other > mine) moreRecent++;
+          else if (other === mine) tied++;
+        }
+        total += moreRecent + (tied + 1) / 2;
         counted++;
       }
     }
     for (const n of main) lastSeen[n - 1] = i;
-  });
-  return counted > 0 ? total / counted : 0;
+  }
+  return counted > 0 ? total / counted : (pool + 1) / 2;
 }
 
 /** Largest number of draws in which any single pair of numbers co-occurred. */

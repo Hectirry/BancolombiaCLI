@@ -164,8 +164,9 @@ export async function statsCommand(opts: {
       ["TEST", "STATISTIC", "IF FAIR", "P-VALUE", "READING"],
       report.tests.map((t) => [
         t.id,
-        t.statistic.toFixed(1),
-        t.expected.toFixed(1),
+        // The overdue rank lives within a fraction of a rank of 22; one decimal would hide it.
+        t.statistic.toFixed(t.id === "due-numbers" ? 2 : 1),
+        t.expected.toFixed(t.id === "due-numbers" ? 2 : 1),
         t.pValue.toFixed(3),
         t.verdict === "consistent with chance" ? c.green(t.verdict) : c.yellow(t.verdict),
       ]),
