@@ -512,6 +512,37 @@
       "note": "seed 1107, mains by structure only (optimal)",
       "revancha": true,
       "cost": 18000
+    },
+    {
+      "recordedAt": "2026-11-16T07:47:10.709Z",
+      "targetDate": "2026-11-16",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            7,
+            11,
+            14,
+            21,
+            38
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            12,
+            16,
+            17,
+            20,
+            40
+          ],
+          "super": 13
+        }
+      ],
+      "note": "seed 1116, mains by structure only (optimal)",
+      "revancha": true,
+      "cost": 18000
     }
   ]
 }
