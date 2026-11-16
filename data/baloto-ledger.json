@@ -514,33 +514,33 @@
       "cost": 18000
     },
     {
-      "recordedAt": "2026-11-16T07:47:10.709Z",
+      "recordedAt": "2026-11-16T07:48:41.606Z",
       "targetDate": "2026-11-16",
       "game": "baloto",
-      "model": "super/posterior",
+      "model": "super/cold-on-request",
       "tickets": [
         {
           "main": [
-            7,
-            11,
-            14,
-            21,
-            38
+            22,
+            24,
+            26,
+            32,
+            37
           ],
-          "super": 11
+          "super": 8
         },
         {
           "main": [
-            12,
-            16,
-            17,
-            20,
-            40
+            1,
+            3,
+            29,
+            39,
+            42
           ],
-          "super": 13
+          "super": 1
         }
       ],
-      "note": "seed 1116, mains by structure only (optimal)",
+      "note": "owner asked for 2 tickets by a different criterion than the default; balls = lowest posterior (cold), the tournament's leading rule at z +1.68 of 3.01 (noise); mains by structure only, disjoint from each other and from the draft they replace. Replaces the super/posterior draft for this draw (11/13, recorded 2026-11-16T07:47Z, kept in git history).",
       "revancha": true,
       "cost": 18000
     }
