@@ -1,0 +1,742 @@
+<title>Balotera simulada</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Public+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: one column. A stage holds the two air machines side by side (stacked on a phone),
+   with the night's record and the controls under them; below, the twin-machine explanation sits beside its chart. */
+:root {
+  --bg: #edf1f7;
+  --surface: #ffffff;
+  --stage: #dde5f1;
+  --ink: #13203a;
+  --muted: #536079;
+  --line: #c3cddd;
+  --accent: #1b57c9;
+  --accent-ink: #ffffff;
+  --glass: rgba(27, 87, 201, 0.07);
+  --glass-edge: #7389ad;
+  --jet: rgba(27, 87, 201, 0.22);
+  --ball: #f6c530;
+  --ball-rim: #b98507;
+  --ball-ink: #2b1d00;
+  --super: #d5332a;
+  --super-rim: #8f1c16;
+  --super-ink: #ffffff;
+  --ghost: #1b57c9;
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1424; --surface: #141f36; --stage: #09101e; --ink: #e7edf8; --muted: #9aa8c2; --line: #2a3a5a;
+    --accent: #82b1ff; --accent-ink: #0a1530; --glass: rgba(130, 177, 255, 0.08); --glass-edge: #6079a6;
+    --jet: rgba(130, 177, 255, 0.24); --ball: #f6c530; --ball-rim: #8a6204; --ball-ink: #2b1d00;
+    --super: #e0483f; --super-rim: #7d1812; --super-ink: #ffffff; --ghost: #a9c8ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1424; --surface: #141f36; --stage: #09101e; --ink: #e7edf8; --muted: #9aa8c2; --line: #2a3a5a;
+  --accent: #82b1ff; --accent-ink: #0a1530; --glass: rgba(130, 177, 255, 0.08); --glass-edge: #6079a6;
+  --jet: rgba(130, 177, 255, 0.24); --ball: #f6c530; --ball-rim: #8a6204; --ball-ink: #2b1d00;
+  --super: #e0483f; --super-rim: #7d1812; --super-ink: #ffffff; --ghost: #a9c8ff;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.55;
+}
+.page {
+  max-width: 980px;
+  margin-inline: auto;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 36px;
+}
+h1, h2, h3 { font-family: var(--font-display); font-weight: 800; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2.1rem, 7vw, 3.3rem); line-height: 1; }
+h2 { font-size: 1.6rem; line-height: 1.15; }
+h3 { font-size: 1.1rem; line-height: 1.2; }
+p { margin: 0; }
+
+.head { display: grid; gap: 10px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.lede { max-width: 62ch; color: var(--muted); }
+
+.stage { background: var(--stage); border-radius: 18px; padding: 16px; display: grid; gap: 18px; }
+.chambers { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 12px; }
+.chamber { margin: 0; display: grid; gap: 6px; justify-items: center; min-width: 0; }
+.chamber-main { flex: 1 1 300px; max-width: 420px; }
+.chamber-super { flex: 0.69 1 200px; max-width: min(290px, 69%); }
+.chamber canvas { display: block; width: 100%; max-width: 100%; }
+#cv-main { aspect-ratio: 70 / 88; }
+#cv-super { aspect-ratio: 48 / 66; }
+figcaption { font-size: 13px; color: var(--muted); text-align: center; }
+
+.status-line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.status { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; min-height: 1.6em; min-width: 0; }
+.night-id { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.acta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px; }
+.acta-block { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.acta-meta { font-size: 13px; color: var(--muted); }
+.pre-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.result-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.result-label { width: 4.6em; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.balls { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.balls li {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums;
+  border: 1.5px dashed var(--line); color: var(--muted);
+}
+.balls li:last-child { margin-left: 6px; }
+.balls li.main { background: var(--ball); color: var(--ball-ink); border: 1.5px solid var(--ball-rim); }
+.balls li.sup { background: var(--super); color: var(--super-ink); border: 1.5px solid var(--super-rim); }
+.balls li.pop { animation: pop 180ms ease-out; }
+@keyframes pop { from { transform: scale(0.6); } to { transform: scale(1); } }
+
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.btn {
+  font: 600 15px var(--font-body);
+  padding: 10px 16px; border-radius: 10px;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+  cursor: pointer;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:focus-visible, .seg input:focus-visible + label, .check input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.seg { display: flex; align-items: center; gap: 8px; }
+.seg-label { font-size: 13px; color: var(--muted); }
+.seg-opts { display: flex; position: relative; }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg label {
+  font-size: 14px; font-weight: 600; padding: 8px 12px; cursor: pointer;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.seg label:first-of-type { border-radius: 10px 0 0 10px; }
+.seg label:last-of-type { border-radius: 0 10px 10px 0; border-left: 0; }
+.seg input:checked + label { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.twin { display: grid; gap: 16px; }
+.twin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.twin-text { display: grid; gap: 14px; min-width: 0; }
+.twin-text p { max-width: 60ch; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 4px 0 0; }
+.facts dt { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 1.55rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.chart { margin: 0; display: grid; gap: 8px; min-width: 0; }
+.chart canvas { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 11; background: var(--surface); border-radius: 12px; }
+.chart figcaption { text-align: left; }
+
+.rules { display: grid; gap: 14px; }
+.rules-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 32px; }
+.rules-grid > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.rules ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.source { font-size: 13px; color: var(--muted); max-width: 70ch; }
+
+@media (max-width: 720px) {
+  .acta, .twin-grid, .rules-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .balls li.pop { animation: none; }
+}
+</style>
+
+<main class="page">
+  <header class="head">
+    <p class="eyebrow">Simulación física · 5 de 43 + 1 de 16</p>
+    <h1>Balotera simulada</h1>
+    <p class="lede">Dos baloteras de aire, una con 43 balotas y otra con 16, que siguen el protocolo del reglamento de Baloto: juego de balotas al azar, pre sorteos y sorteo oficial. Es un modelo para mirar. No es el sorteo real y no predice nada.</p>
+  </header>
+
+  <section class="stage" aria-label="Simulación de la noche de sorteo">
+    <div class="chambers">
+      <figure class="chamber chamber-main">
+        <canvas id="cv-main" role="img" aria-label="Balotera con 43 balotas amarillas rebotando"></canvas>
+        <figcaption>Primer conjunto · balotas 1 a 43 · salen 5</figcaption>
+      </figure>
+      <figure class="chamber chamber-super">
+        <canvas id="cv-super" role="img" aria-label="Balotera con 16 balotas rojas rebotando"></canvas>
+        <figcaption>Segundo conjunto · balotas 1 a 16 · sale 1</figcaption>
+      </figure>
+    </div>
+
+    <div class="status-line">
+      <p id="status" class="status" aria-live="polite">Las balotas están en reposo.</p>
+      <p id="night-id" class="night-id"></p>
+    </div>
+
+    <div id="acta" class="acta" aria-label="Acta de la noche"></div>
+
+    <div class="controls">
+      <button id="btn-start" class="btn primary" type="button">Empezar la noche</button>
+      <button id="btn-repeat" class="btn" type="button">Repetir la misma</button>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-shape">
+        <span id="lbl-shape" class="seg-label">Forma</span>
+        <div class="seg-opts">
+          <input type="radio" name="shape" id="shape-esfera" value="esfera" checked><label for="shape-esfera">Esfera</label>
+          <input type="radio" name="shape" id="shape-caja" value="caja"><label for="shape-caja">Caja</label>
+        </div>
+      </div>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-speed">
+        <span id="lbl-speed" class="seg-label">Velocidad</span>
+        <div class="seg-opts">
+          <input type="radio" name="speed" id="speed-normal" value="1" checked><label for="speed-normal">Real</label>
+          <input type="radio" name="speed" id="speed-lenta" value="0.2"><label for="speed-lenta">Lenta</label>
+        </div>
+      </div>
+      <label class="check" for="ghosts"><input type="checkbox" id="ghosts"> Ver la gemela encima</label>
+    </div>
+  </section>
+
+  <section class="twin" aria-labelledby="h-twin">
+    <h2 id="h-twin">La balotera gemela</h2>
+    <div class="twin-grid">
+      <div class="twin-text">
+        <p>En cada sorteo oficial corre por debajo una segunda máquina idéntica: las mismas balotas, el mismo aire y las mismas reglas. La única diferencia es que su balota <b id="pert-num">1</b> arranca un nanómetro más a la derecha, es decir, una millonésima de milímetro.</p>
+        <p id="twin-readout">Cuando empiece el sorteo oficial, mira la curva: muestra cuánto se aparta cada balota de su gemela.</p>
+        <dl class="facts">
+          <div><dt>Diferencia inicial</dt><dd>1 nm</dd></div>
+          <div><dt>Llega a 1 cm en</dt><dd id="f-cm">—</dd></div>
+          <div><dt>Se duplica cada</dt><dd id="f-double">—</dd></div>
+          <div><dt>Balotas iguales al final</dt><dd id="f-same">—</dd></div>
+        </dl>
+      </div>
+      <figure class="chart">
+        <canvas id="cv-chart" role="img" aria-label="Gráfica de la distancia entre las dos máquinas durante el primer segundo"></canvas>
+        <figcaption>Mayor distancia entre una balota y su gemela durante el primer segundo del sorteo oficial. La escala es logarítmica: cada raya es mil veces la anterior.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="rules" aria-labelledby="h-rules">
+    <h2 id="h-rules">Qué viene del reglamento y qué no</h2>
+    <div class="rules-grid">
+      <div>
+        <h3>Tomado del reglamento</h3>
+        <ul>
+          <li>Las baloteras son máquinas transparentes de extracción neumática, que sacan las balotas con un flujo turbulento de aire.</li>
+          <li>Hay una balotera por cada conjunto de números: una para las balotas 1 a 43 y otra para las 1 a 16.</li>
+          <li>Existen al menos cinco juegos de balotas, y un generador de números aleatorios elige cuál se usa.</li>
+          <li>Antes de cada sorteo oficial se hace un número aleatorio de pre sorteos, entre uno y cinco. Cada uno saca seis balotas: cinco y una.</li>
+          <li>El sorteo oficial saca cinco balotas del primer conjunto y una del segundo. Baloto y Revancha son sorteos separados.</li>
+          <li>Las balotas deben estar certificadas como iguales en tamaño, textura, color y peso; aquí son idénticas.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Supuesto en este modelo</h3>
+        <ul>
+          <li>El reglamento no publica las medidas: las deja a normas de certificación. Aquí la balota mide 4 cm y las baloteras 70 cm y 48 cm.</li>
+          <li>La forma de la máquina, la fuerza del aire y los tiempos: 2,5 segundos de mezcla antes de la primera balota y un segundo entre balotas.</li>
+          <li>El modelo tiene dos dimensiones. Las balotas son discos, el aire es un chorro con ráfagas que cambian con el tiempo, y cada choque conserva el 92 % de la velocidad. Una máquina real tiene tres dimensiones y giro, que la hacen todavía más sensible.</li>
+          <li>La máquina no tiene azar por dentro: «Repetir la misma» da las mismas balotas. Lo que impide adivinar el resultado es que nadie puede medir dónde está cada balota con la precisión que haría falta.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="source">Fuente: Acuerdo 03 de 2026 de Coljuegos, artículo 2.4.3, y su anexo técnico, Resolución 19344 de 2026, numeral 3.5. Lo que sale aquí no tiene ninguna relación con los resultados de Baloto ni sirve para elegir números.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- physics (metres, seconds; y points up) ----------
+  const G = 9.81, R = 0.02, REST = 0.92, JET = 60, JET_W = 0.45, DRAG = 0.4, DT = 2e-4;
+  const TUBE = 0.14, BASE = 0.04, INV = Math.SQRT1_2, NUDGE = 1e-9;
+  const MIX_STEPS = Math.round(2.5 / DT), GAP_STEPS = Math.round(1.0 / DT);
+  const OFF_STEPS = Math.round(0.6 / DT), SETTLE_STEPS = Math.round(3.2 / DT), PRE_TAIL = Math.round(0.3 / DT);
+  const ONE_SECOND = Math.round(1 / DT), SAMPLE_EVERY = 10, LIMIT_STEPS = Math.round(60 / DT);
+  const SPEC_MAIN = { n: 43, S: 0.35 }, SPEC_SUP = { n: 16, S: 0.24 };
+
+  function mulberry(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Balls start at rest in a jittered grid; which number sits where is shuffled by the seed.
+  function makeChamber(spec, shape, seed, nudge) {
+    const n = spec.n, S = spec.S, rng = mulberry(seed);
+    const c = {
+      n, S, shape, cut: 0.57 * S,
+      x: new Float64Array(n), y: new Float64Array(n), vx: new Float64Array(n), vy: new Float64Array(n),
+      alive: new Uint8Array(n).fill(1), label: new Int16Array(n),
+      steps: 0, jet: true, taken: [], exiting: [], phase: [0, 0, 0],
+    };
+    const labels = Array.from({ length: n }, (_, i) => i + 1);
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const t = labels[i]; labels[i] = labels[j]; labels[j] = t;
+    }
+    const perRow = Math.ceil(Math.sqrt(n)), gap = R * 2.4;
+    for (let i = 0; i < n; i++) {
+      const row = Math.floor(i / perRow), col = i % perRow;
+      c.label[i] = labels[i];
+      c.x[i] = (col - (perRow - 1) / 2) * gap + (rng() - 0.5) * 1e-3;
+      c.y[i] = -S * 0.5 + row * gap + (rng() - 0.5) * 1e-3;
+    }
+    c.phase = [rng() * 6.2832, rng() * 6.2832, rng() * 6.2832];
+    c.x[0] += nudge;
+    return c;
+  }
+
+  function step(c) {
+    const { x, y, vx, vy, alive, n, S } = c;
+    const jetW = JET_W * S, e = c.jet ? REST : 0.55, damp = 1 - (c.jet ? DRAG : 3) * DT;
+    const t = c.steps * DT, w1 = 18.8 * t + c.phase[0], w2 = 31.4 * t + c.phase[1], w3 = 25.1 * t + c.phase[2];
+    const gust = Math.sin(w1);
+
+    // Air: an upward plume, strongest at the bottom centre and fading with height,
+    // plus gusts that change in time and from place to place. The same air for a machine and its twin.
+    for (let i = 0; i < n; i++) {
+      if (!alive[i]) continue;
+      let ax = 0, ay = -G;
+      if (c.jet) {
+        const lateral = Math.exp(-((x[i] / jetW) ** 2));
+        const fade = Math.max(0, 1 - (y[i] + S) / (2 * S));
+        ay += JET * lateral * fade * (1 + 0.3 * Math.sin(w3 + 9 * x[i]));
+        ax = 8 * Math.sin(w2 + 12 * y[i]) + 5 * gust * Math.cos(10 * x[i] + 6 * y[i]);
+      }
+      vx[i] = (vx[i] + ax * DT) * damp;
+      vy[i] = (vy[i] + ay * DT) * damp;
+      x[i] += vx[i] * DT;
+      y[i] += vy[i] * DT;
+    }
+
+    // Ball against ball: equal masses, exchange of the normal component.
+    const minDist = 2 * R, minDist2 = minDist * minDist;
+    for (let i = 0; i < n; i++) {
+      if (!alive[i]) continue;
+      for (let j = i + 1; j < n; j++) {
+        if (!alive[j]) continue;
+        const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy;
+        if (d2 >= minDist2 || d2 === 0) continue;
+        const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, half = (minDist - d) / 2;
+        x[i] -= nx * half; y[i] -= ny * half; x[j] += nx * half; y[j] += ny * half;
+        const closing = (vx[j] - vx[i]) * nx + (vy[j] - vy[i]) * ny;
+        if (closing >= 0) continue;
+        const imp = (-(1 + e) * closing) / 2;
+        vx[i] -= imp * nx; vy[i] -= imp * ny; vx[j] += imp * nx; vy[j] += imp * ny;
+      }
+    }
+
+    // Walls.
+    const lim = S - R;
+    if (c.shape === "esfera") {
+      for (let i = 0; i < n; i++) {
+        if (!alive[i]) continue;
+        const d2 = x[i] * x[i] + y[i] * y[i];
+        if (d2 <= lim * lim || d2 === 0) continue;
+        const d = Math.sqrt(d2), nx = x[i] / d, ny = y[i] / d;
+        x[i] = nx * lim; y[i] = ny * lim;
+        const vn = vx[i] * nx + vy[i] * ny;
+        if (vn > 0) { vx[i] -= (1 + e) * vn * nx; vy[i] -= (1 + e) * vn * ny; }
+      }
+    } else {
+      // A box whose two bottom corners are cut at 45°, so balls slide back to the jet.
+      const chamfer = (2 * S - c.cut) * INV - R;
+      for (let i = 0; i < n; i++) {
+        if (!alive[i]) continue;
+        if (x[i] > lim) { x[i] = lim; if (vx[i] > 0) vx[i] = -e * vx[i]; }
+        else if (x[i] < -lim) { x[i] = -lim; if (vx[i] < 0) vx[i] = -e * vx[i]; }
+        if (y[i] > lim) { y[i] = lim; if (vy[i] > 0) vy[i] = -e * vy[i]; }
+        else if (y[i] < -lim) { y[i] = -lim; if (vy[i] < 0) vy[i] = -e * vy[i]; }
+        let s = (x[i] - y[i]) * INV;
+        if (s > chamfer) {
+          const o = (s - chamfer) * INV; x[i] -= o; y[i] += o;
+          const vn = (vx[i] - vy[i]) * INV;
+          if (vn > 0) { const k = (1 + e) * vn * INV; vx[i] -= k; vy[i] += k; }
+        }
+        s = (-x[i] - y[i]) * INV;
+        if (s > chamfer) {
+          const o = (s - chamfer) * INV; x[i] += o; y[i] += o;
+          const vn = (-vx[i] - vy[i]) * INV;
+          if (vn > 0) { const k = (1 + e) * vn * INV; vx[i] += k; vy[i] += k; }
+        }
+      }
+    }
+    c.steps++;
+  }
+
+  // The tube takes the first ball that flies up into its mouth at the top centre.
+  function capture(c) {
+    const top = c.S - R - 0.03;
+    for (let i = 0; i < c.n; i++) {
+      if (c.alive[i] && c.y[i] > top && Math.abs(c.x[i]) < 2 * R && c.vy[i] > 0) {
+        c.alive[i] = 0;
+        c.taken.push(c.label[i]);
+        c.exiting.push({ label: c.label[i], at: c.steps });
+        return c.label[i];
+      }
+    }
+    return 0;
+  }
+
+  // One draw: both machines, and the rule for when each tube opens.
+  function makeMachine(shape, seed, nudge) {
+    return {
+      main: makeChamber(SPEC_MAIN, shape, seed, nudge),
+      sup: makeChamber(SPEC_SUP, shape, (seed ^ 0x9e3779b9) >>> 0, nudge),
+      mainGate: MIX_STEPS, supGate: Infinity, done: false, doneAt: Infinity, out: [],
+    };
+  }
+  function stepMachine(m) {
+    step(m.main); step(m.sup);
+    const s = m.main.steps;
+    if (m.main.taken.length < 5) {
+      if (s >= m.mainGate) {
+        const got = capture(m.main);
+        if (got) {
+          m.out.push({ kind: "main", n: got });
+          m.mainGate = s + GAP_STEPS;
+          if (m.main.taken.length === 5) m.supGate = s + GAP_STEPS;
+        }
+      }
+    } else if (!m.done && s >= m.supGate) {
+      const got = capture(m.sup);
+      if (got) { m.out.push({ kind: "sup", n: got }); m.done = true; m.doneAt = s; }
+    }
+    if (m.done && s === m.doneAt + OFF_STEPS) { m.main.jet = false; m.sup.jet = false; }
+  }
+  const gateOpen = (m, which) => which === "main"
+    ? m.main.taken.length < 5 && m.main.steps >= m.mainGate
+    : m.main.taken.length === 5 && !m.done && m.main.steps >= m.supGate;
+
+  // ---------- the night: for each draw type, a ball set and a number of pre-draws chosen by the generator ----------
+  const TYPES = [{ id: "baloto", name: "Baloto" }, { id: "revancha", name: "Revancha" }];
+  function planNight(seed) {
+    const plan = [], meta = [];
+    TYPES.forEach((type, k) => {
+      const g = mulberry((seed * 2654435761 + k * 40503 + 17) >>> 0);
+      const set = 1 + Math.floor(g() * 5), pre = 1 + Math.floor(g() * 5);
+      meta.push({ type, set, pre });
+      for (let i = 0; i < pre; i++) plan.push({ type, kind: "pre", n: i + 1, of: pre, seed: Math.floor(g() * 4294967296) + set });
+      plan.push({ type, kind: "oficial", seed: Math.floor(g() * 4294967296) + set });
+    });
+    return { seed, plan, meta, i: 0 };
+  }
+
+  // ---------- page state ----------
+  const $ = (id) => document.getElementById(id);
+  const cvMain = $("cv-main"), cvSup = $("cv-super"), cvChart = $("cv-chart");
+  const fmt = (v, d) => v.toLocaleString("es-CO", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const two = (n) => String(n).padStart(2, "0");
+  const store = {
+    get(k, fallback) { try { return localStorage.getItem("balotera." + k) ?? fallback; } catch { return fallback; } },
+    set(k, v) { try { localStorage.setItem("balotera." + k, v); } catch { /* storage is optional */ } },
+  };
+
+  let shape = store.get("shape", "esfera") === "caja" ? "caja" : "esfera";
+  let speed = store.get("speed", "1") === "0.2" ? 0.2 : 1;
+  let ghosts = store.get("ghosts", "0") === "1";
+  let night = null, cur = null, A = null, B = null, raf = 0, last = 0, acc = 0, shownA = 0, shownB = 0;
+  let series = [], tCm = null, tLow = null, tHigh = null, pal = null;
+
+  function readPalette() {
+    const cs = getComputedStyle(document.documentElement), g = (n) => cs.getPropertyValue(n).trim();
+    pal = {
+      ink: g("--ink"), muted: g("--muted"), line: g("--line"), accent: g("--accent"), glass: g("--glass"),
+      edge: g("--glass-edge"), jet: g("--jet"), ball: g("--ball"), ballRim: g("--ball-rim"), ballInk: g("--ball-ink"),
+      sup: g("--super"), supRim: g("--super-rim"), supInk: g("--super-ink"), ghost: g("--ghost"),
+    };
+  }
+
+  function fit(cv) {
+    const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, r.width, r.height);
+    return { ctx, w: r.width, h: r.height };
+  }
+
+  // ---------- drawing ----------
+  function drawBall(ctx, px, py, rp, label, fill, rim, ink) {
+    ctx.beginPath(); ctx.arc(px, py, rp, 0, 6.2832);
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = rim; ctx.stroke();
+    ctx.fillStyle = ink;
+    ctx.fillText(String(label), px, py + rp * 0.06);
+  }
+  function bodyPath(ctx, c, X, Y, k) {
+    const S = c.S;
+    ctx.beginPath();
+    if (c.shape === "esfera") ctx.arc(X(0), Y(0), S * k, 0, 6.2832);
+    else {
+      ctx.moveTo(X(-S), Y(S)); ctx.lineTo(X(S), Y(S)); ctx.lineTo(X(S), Y(-S + c.cut)); ctx.lineTo(X(S - c.cut), Y(-S));
+      ctx.lineTo(X(-S + c.cut), Y(-S)); ctx.lineTo(X(-S), Y(-S + c.cut)); ctx.closePath();
+    }
+  }
+
+  function drawChamber(cv, c, twin, open, isSuper) {
+    const { ctx, w, h } = fit(cv);
+    const S = c.S, pad = 4;
+    const k = Math.min((w - 2 * pad) / (2 * S), (h - 2 * pad) / (2 * S + TUBE + BASE));
+    const cx = w / 2, cy = pad + (S + TUBE) * k;
+    const X = (x) => cx + x * k, Y = (y) => cy - y * k, rp = R * k;
+    const fill = isSuper ? pal.sup : pal.ball, rim = isSuper ? pal.supRim : pal.ballRim, ink = isSuper ? pal.supInk : pal.ballInk;
+
+    // nozzle
+    ctx.fillStyle = pal.edge;
+    ctx.beginPath();
+    ctx.moveTo(X(-0.05), Y(-S)); ctx.lineTo(X(0.05), Y(-S)); ctx.lineTo(X(0.034), Y(-S - BASE)); ctx.lineTo(X(-0.034), Y(-S - BASE));
+    ctx.closePath(); ctx.fill();
+
+    // body and air plume
+    bodyPath(ctx, c, X, Y, k);
+    ctx.fillStyle = pal.glass; ctx.fill();
+    if (c.jet) {
+      const jw = JET_W * S, grad = ctx.createLinearGradient(0, Y(-S), 0, Y(S * 0.45));
+      grad.addColorStop(0, pal.jet); grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.save(); ctx.clip();
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(X(-jw * 0.55), Y(-S)); ctx.lineTo(X(jw * 0.55), Y(-S)); ctx.lineTo(X(jw * 1.05), Y(S * 0.45)); ctx.lineTo(X(-jw * 1.05), Y(S * 0.45));
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+      bodyPath(ctx, c, X, Y, k);
+    }
+    ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.strokeStyle = pal.edge; ctx.stroke();
+
+    // tube: its walls, and the mouth lit while it is open
+    const tw = 1.35 * R;
+    ctx.lineWidth = 2; ctx.strokeStyle = open ? pal.accent : pal.edge;
+    ctx.beginPath();
+    ctx.moveTo(X(-tw), Y(S)); ctx.lineTo(X(-tw), Y(S + TUBE)); ctx.moveTo(X(tw), Y(S)); ctx.lineTo(X(tw), Y(S + TUBE));
+    ctx.stroke();
+    if (open) { ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(X(-tw), Y(S)); ctx.lineTo(X(tw), Y(S)); ctx.stroke(); }
+
+    // balls
+    ctx.font = `800 ${Math.max(7, rp * 1.06).toFixed(1)}px Archivo, "Arial Narrow", system-ui, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (let i = 0; i < c.n; i++) if (c.alive[i]) drawBall(ctx, X(c.x[i]), Y(c.y[i]), rp, c.label[i], fill, rim, ink);
+    for (let i = c.exiting.length - 1; i >= 0; i--) {
+      const ex = c.exiting[i], y = S - R + (c.steps - ex.at) * DT * 0.5;
+      if (y > S + TUBE - R) { c.exiting.splice(i, 1); continue; }
+      drawBall(ctx, X(0), Y(y), rp, ex.label, fill, rim, ink);
+    }
+
+    // the twin's balls, as dashed outlines
+    if (twin) {
+      ctx.setLineDash([3, 3]); ctx.lineWidth = 1.4; ctx.strokeStyle = pal.ghost;
+      for (let i = 0; i < twin.n; i++) {
+        if (!twin.alive[i]) continue;
+        ctx.beginPath(); ctx.arc(X(twin.x[i]), Y(twin.y[i]), rp, 0, 6.2832); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+  }
+
+  const LOG_MIN = -9, LOG_MAX = Math.log10(0.7);
+  function drawChart() {
+    const { ctx, w, h } = fit(cvChart);
+    const m = { l: 58, r: 14, t: 16, b: 30 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
+    const X = (t) => m.l + t * pw, Y = (lg) => m.t + ((LOG_MAX - Math.max(LOG_MIN, Math.min(LOG_MAX, lg))) / (LOG_MAX - LOG_MIN)) * ph;
+    ctx.font = '12px "Public Sans", system-ui, sans-serif';
+    ctx.lineWidth = 1; ctx.textBaseline = "middle";
+    for (const [lg, name] of [[-9, "1 nm"], [-6, "1 µm"], [-3, "1 mm"], [LOG_MAX, "70 cm"]]) {
+      ctx.strokeStyle = pal.line; ctx.beginPath(); ctx.moveTo(m.l, Y(lg)); ctx.lineTo(w - m.r, Y(lg)); ctx.stroke();
+      ctx.fillStyle = pal.muted; ctx.textAlign = "right"; ctx.fillText(name, m.l - 8, Y(lg));
+    }
+    ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = pal.muted;
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) ctx.fillText(t === 0 ? "0" : fmt(t, 2) + " s", X(t) - (t === 1 ? 10 : 0), h - m.b + 8);
+    const lgBall = Math.log10(2 * R);
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = pal.muted; ctx.beginPath(); ctx.moveTo(m.l, Y(lgBall)); ctx.lineTo(w - m.r, Y(lgBall)); ctx.stroke();
+    ctx.setLineDash([]);
+    // Labelled on the left, above the line: the curve only gets up here late in the second.
+    ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+    ctx.fillText("el ancho de una balota", m.l + 6, Y(lgBall) - 4);
+
+    if (series.length > 1) {
+      ctx.lineWidth = 2.5; ctx.lineJoin = "round"; ctx.strokeStyle = pal.accent;
+      ctx.beginPath();
+      series.forEach((p, i) => { const px = X(p.t), py = Y(Math.log10(p.d)); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+      ctx.stroke();
+      const end = series[series.length - 1];
+      ctx.fillStyle = pal.accent; ctx.beginPath(); ctx.arc(X(end.t), Y(Math.log10(end.d)), 4, 0, 6.2832); ctx.fill();
+    }
+  }
+
+  function render() {
+    drawChamber(cvMain, A.main, ghosts && B ? B.main : null, gateOpen(A, "main"), false);
+    drawChamber(cvSup, A.sup, ghosts && B ? B.sup : null, gateOpen(A, "sup"), true);
+  }
+
+  // ---------- the night's record ----------
+  const slots = () => "<li></li>".repeat(6);
+  function buildActa() {
+    $("acta").innerHTML = night.meta.map(({ type, set, pre }) => `
+      <div class="acta-block">
+        <h3>Sorteo ${type.name}</h3>
+        <p class="acta-meta">Juego de balotas n.º ${set} de 5 · ${pre} pre sorteo${pre === 1 ? "" : "s"}</p>
+        <ul class="pre-list" id="pre-${type.id}">${Array.from({ length: pre }, (_, i) => `<li>Pre sorteo ${i + 1}: pendiente</li>`).join("")}</ul>
+        <div class="result-row"><span class="result-label">Oficial</span><ol class="balls" id="res-${type.id}" aria-label="Balotas del sorteo oficial de ${type.name}">${slots()}</ol></div>
+        <div class="result-row"><span class="result-label">Gemela</span><ol class="balls" id="twin-${type.id}" aria-label="Balotas de la balotera gemela en ${type.name}">${slots()}</ol></div>
+      </div>`).join("");
+  }
+  function fillSlots(listId, m, shown) {
+    const items = $(listId).children;
+    while (shown < m.out.length) {
+      const o = m.out[shown], li = items[shown];
+      li.textContent = String(o.n);
+      li.className = (o.kind === "main" ? "main" : "sup") + " pop";
+      shown++;
+    }
+    return shown;
+  }
+  function flush() {
+    if (cur.kind !== "oficial") return;
+    shownA = fillSlots("res-" + cur.type.id, A, shownA);
+    shownB = fillSlots("twin-" + cur.type.id, B, shownB);
+  }
+  function setStatus(text) { if ($("status").textContent !== text) $("status").textContent = text; }
+  function status() {
+    if (cur.kind === "pre") return setStatus(`${cur.type.name}: pre sorteo ${cur.n} de ${cur.of}, en cámara rápida…`);
+    const k = A.main.taken.length, name = "Sorteo " + cur.type.name;
+    if (A.done) setStatus(`${name} terminado.`);
+    else if (k === 5) setStatus(`${name}: ahora la balota del segundo conjunto…`);
+    else if (k > 0) setStatus(`${name}: salió la balota ${k} de 5, el ${A.main.taken[k - 1]}.`);
+    else setStatus(`${name}: mezclando las balotas…`);
+  }
+
+  function sample() {
+    const a = A.main, b = B.main;
+    let worst = 0;
+    for (let i = 0; i < a.n; i++) {
+      if (!a.alive[i] || !b.alive[i]) continue;
+      const d = Math.hypot(a.x[i] - b.x[i], a.y[i] - b.y[i]);
+      if (d > worst) worst = d;
+    }
+    const t = a.steps * DT, d = Math.max(worst, 1e-12);
+    series.push({ t, d });
+    if (tLow === null && d > 1e-8) tLow = t;
+    if (tHigh === null && d > 1e-3) tHigh = t;
+    if (tCm === null && d > 0.01) {
+      tCm = t;
+      $("f-cm").textContent = fmt(t, 2) + " s";
+      $("twin-readout").textContent = `En el sorteo de ${cur.type.name}, a los ${fmt(t, 2)} segundos alguna balota ya estaba a más de un centímetro de su gemela. Cuando sale la primera balota, las dos máquinas ya no se parecen en nada.`;
+    }
+    if (tLow !== null && tHigh !== null && tHigh > tLow && $("f-double").textContent === "—") {
+      $("f-double").textContent = fmt(((Math.LN2 * (tHigh - tLow)) / Math.log(1e5)) * 1000, 0) + " ms";
+    }
+  }
+  function compare() {
+    if (!B || !(A.done && B.done) || $("f-same").textContent !== "—") return;
+    const mainsB = new Set(B.main.taken);
+    let same = A.main.taken.filter((n) => mainsB.has(n)).length;
+    if (A.sup.taken[0] === B.sup.taken[0]) same++;
+    $("f-same").textContent = `${same} de 6`;
+  }
+
+  // ---------- running ----------
+  function beginDraw(i) {
+    night.i = i; cur = night.plan[i];
+    A = makeMachine(shape, cur.seed, 0);
+    B = cur.kind === "oficial" ? makeMachine(shape, cur.seed, NUDGE) : null;
+    shownA = shownB = 0; acc = 0;
+    if (B) {
+      series = [{ t: 0, d: NUDGE }]; tCm = tLow = tHigh = null;
+      $("pert-num").textContent = String(B.main.label[0]);
+      $("f-cm").textContent = "—"; $("f-double").textContent = "—"; $("f-same").textContent = "—";
+      $("twin-readout").textContent = "Mira la curva: muestra cuánto se aparta cada balota de su gemela.";
+      drawChart();
+    }
+  }
+  function drawFinished() {
+    const s = A.main.steps;
+    if (s > LIMIT_STEPS) return true;
+    if (cur.kind === "pre") return A.done && s >= A.doneAt + PRE_TAIL;
+    return A.done && B.done && s >= Math.max(A.doneAt, B.doneAt) + OFF_STEPS + SETTLE_STEPS;
+  }
+  // Returns false when the night is over.
+  function finishDraw() {
+    flush(); compare();
+    if (cur.kind === "pre") {
+      const li = $("pre-" + cur.type.id).children[cur.n - 1];
+      li.textContent = `Pre sorteo ${cur.n}: ${A.main.taken.map(two).join(" · ")} + ${two(A.sup.taken[0] ?? 0)}`;
+    }
+    if (night.i + 1 >= night.plan.length) return false;
+    beginDraw(night.i + 1);
+    return true;
+  }
+
+  function prepare(seed, play) {
+    cancelAnimationFrame(raf); raf = 0; last = 0;
+    night = planNight(seed >>> 0);
+    buildActa();
+    $("night-id").textContent = "Noche n.º " + String(night.seed).padStart(6, "0");
+    series = []; tCm = tLow = tHigh = null;
+    $("f-cm").textContent = "—"; $("f-double").textContent = "—"; $("f-same").textContent = "—";
+    $("twin-readout").textContent = "Cuando empiece el sorteo oficial, mira la curva: muestra cuánto se aparta cada balota de su gemela.";
+    beginDraw(0);
+    $("btn-start").textContent = play ? "Otra noche" : "Empezar la noche";
+    if (play) status(); else setStatus("Las balotas están en reposo.");
+    render(); drawChart();
+    if (play) raf = requestAnimationFrame(frame);
+  }
+
+  function frame(ts) {
+    const elapsed = last ? Math.min(0.05, (ts - last) / 1000) : 0;
+    last = ts;
+    const pre = cur.kind === "pre";
+    acc += elapsed * (pre ? 10 : speed);
+    let steps = Math.floor(acc / DT);
+    acc -= steps * DT;
+    const cap = pre ? 900 : 300;
+    if (steps > cap) { steps = cap; acc = 0; }
+    let alive = true;
+    for (let i = 0; i < steps; i++) {
+      stepMachine(A);
+      if (B) {
+        stepMachine(B);
+        const s = A.main.steps;
+        if (s <= ONE_SECOND && s % SAMPLE_EVERY === 0) sample();
+      }
+      if (drawFinished()) { alive = finishDraw(); break; }
+    }
+    flush(); compare();
+    if (alive) status(); else setStatus("Noche terminada: Baloto y Revancha ya salieron.");
+    render();
+    if (B && A.main.steps <= ONE_SECOND + 400) drawChart();
+    raf = alive ? requestAnimationFrame(frame) : 0;
+  }
+
+  const newSeed = () => Math.floor(Math.random() * 1e6);
+  $("btn-start").addEventListener("click", () => prepare(newSeed(), true));
+  $("btn-repeat").addEventListener("click", () => prepare(night.seed, true));
+  for (const el of document.querySelectorAll('input[name="shape"]')) {
+    el.checked = el.value === shape;
+    el.addEventListener("change", () => { if (el.checked) { shape = el.value; store.set("shape", shape); prepare(night.seed, true); } });
+  }
+  for (const el of document.querySelectorAll('input[name="speed"]')) {
+    el.checked = Number(el.value) === speed;
+    el.addEventListener("change", () => { if (el.checked) { speed = Number(el.value); store.set("speed", el.value); } });
+  }
+  $("ghosts").checked = ghosts;
+  $("ghosts").addEventListener("change", () => { ghosts = $("ghosts").checked; store.set("ghosts", ghosts ? "1" : "0"); if (!raf) render(); });
+
+  const repaint = () => { readPalette(); if (A) { render(); drawChart(); } };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", repaint);
+  new MutationObserver(repaint).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  new ResizeObserver(() => { if (!A) return; if (!raf) render(); drawChart(); }).observe(document.querySelector(".page"));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (A && !raf) { render(); drawChart(); } });
+
+  readPalette();
+  prepare(newSeed(), !matchMedia("(prefers-reduced-motion: reduce)").matches);
+})();
+</script>
