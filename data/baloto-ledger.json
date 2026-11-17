@@ -514,33 +514,33 @@
       "cost": 18000
     },
     {
-      "recordedAt": "2026-11-16T07:48:41.606Z",
+      "recordedAt": "2026-11-17T01:37:04.031Z",
       "targetDate": "2026-11-16",
       "game": "baloto",
       "model": "super/cold-on-request",
       "tickets": [
         {
           "main": [
-            22,
-            24,
-            26,
+            10,
+            25,
             32,
-            37
+            33,
+            36
           ],
           "super": 8
         },
         {
           "main": [
-            1,
-            3,
-            29,
-            39,
+            9,
+            13,
+            24,
+            34,
             42
           ],
           "super": 1
         }
       ],
-      "note": "owner asked for 2 tickets by a different criterion than the default; balls = lowest posterior (cold), the tournament's leading rule at z +1.68 of 3.01 (noise); mains by structure only, disjoint from each other and from the draft they replace. Replaces the super/posterior draft for this draw (11/13, recorded 2026-11-16T07:47Z, kept in git history).",
+      "note": "owner asked for two combinations 'with what was learned'; balls unchanged (lowest posterior, 8 and 1: nothing learned favours another pair); mains re-drawn disjoint with a typical amplitude (24–35), the owner's preference, which changes no probability (experiments/amplitude). Replaces the entry recorded 2026-11-16T07:48Z for the same draw (22 24 26 32 37 + 8, 01 03 29 39 42 + 1; kept in git history).",
       "revancha": true,
       "cost": 18000
     }
