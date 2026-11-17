@@ -90,3 +90,49 @@ for (const [name, label] of [["light5", "5 % lighter"], ["light10", "10 % lighte
 }
 console.log(`\n   A count in the real history has a standard deviation of ${sdReal.toFixed(1)}; reading all 43 balls at once, one stands out past |z| = ${bonf.toFixed(2)}.`);
 console.log(`   The largest real deviations are +2.24 σ (Baloto, ball 25) and +1.75 σ (Revancha, ball 4): P(|z| ≥ 2.24 somewhere among 43) = ${pct(1 - (1 - 2 * (1 - normalCdf(2.24))) ** POOL, 0)}.`);
+
+// 3. A rule built on one set of fair draws, tried on another: the numbers that came out most and least.
+const zScores = (mains: number[][]) => {
+  const n = mains.length, sd = Math.sqrt(n * base * (1 - base) * (38 / 42)), c = new Array<number>(POOL + 1).fill(0);
+  for (const m of mains) for (const v of m) c[v]!++;
+  return { z: c.map((v) => (v - n * base) / sd), c };
+};
+const corr = (x: number[], y: number[]) => {
+  const mx = x.reduce((a, b) => a + b, 0) / x.length, my = y.reduce((a, b) => a + b, 0) / y.length;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < x.length; i++) { sxy += (x[i]! - mx) * (y[i]! - my); sxx += (x[i]! - mx) ** 2; syy += (y[i]! - my) ** 2; }
+  return sxy / Math.sqrt(sxx * syy);
+};
+function hotColdTest(title: string, first: number[][], second: number[][]) {
+  const a = zScores(first), b = zScores(second);
+  const order = Array.from({ length: POOL }, (_, i) => i + 1).sort((p, q) => a.z[q]! - a.z[p]!);
+  const hot = order.slice(0, 5), cold = order.slice(-5);
+  const rate = (nums: number[]) => second.reduce((acc, m) => acc + m.filter((v) => nums.includes(v)).length, 0) / second.length;
+  const se = Math.sqrt((5 * base * (1 - base) * (38 / 42)) / second.length), chance = (5 * PICK) / POOL;
+  console.log(`   ${title}: ${first.length} draws to choose, ${second.length} to test`);
+  console.log(`     most drawn five ${hot.join(", ")} → ${rate(hot).toFixed(4)} matches a draw afterwards (z ${((rate(hot) - chance) / se).toFixed(2)}); least drawn five ${cold.join(", ")} → ${rate(cold).toFixed(4)} (z ${((rate(cold) - chance) / se).toFixed(2)}); chance ${chance.toFixed(4)}`);
+  console.log(`     correlation between a number's deviation before and after: ${corr(a.z.slice(1), b.z.slice(1)).toFixed(3)} (±0.30 is the 95 % band around zero for 43 numbers)`);
+  const top = order[0]!, bottom = order[POOL - 1]!;
+  console.log(`     the hottest, ${top}: ${a.c[top]} then ${b.c[top]} (z ${a.z[top]!.toFixed(2)} → ${b.z[top]!.toFixed(2)}); the coldest, ${bottom}: ${a.c[bottom]} then ${b.c[bottom]} (z ${a.z[bottom]!.toFixed(2)} → ${b.z[bottom]!.toFixed(2)})`);
+}
+console.log("\n3. A RULE BUILT ON ONE SET OF DRAWS, TRIED ON THE NEXT — hot and cold numbers\n");
+const second = by.get("fair2");
+if (fair && second) hotColdTest("simulated fair machine, two independent sets", fair.map((r) => r.m), second.map((r) => r.m));
+try {
+  const { loadDataset, drawsFor } = await import("../../src/baloto/dataset.ts");
+  const ds = await loadDataset();
+  if (ds) for (const game of ["baloto", "revancha"] as const) {
+    const mains = drawsFor(ds, game).map((d) => d.main), half = Math.floor(mains.length / 2);
+    hotColdTest(`real ${game}, first half against second half`, mains.slice(0, half), mains.slice(half));
+  }
+} catch { /* the real history is optional here */ }
+
+// 4. What a weight defect of the size seen in section 2 would take to show in real draws.
+const lighter = [...(by.get("light5") ?? []), ...(by.get("light10") ?? [])];
+if (lighter.length > 0) {
+  const p = lighter.filter((r) => r.m.includes(7)).length / lighter.length, se = Math.sqrt((base * (1 - base)) / lighter.length), eff = p / base - 1;
+  const k = Math.sqrt(base / ((1 - base) * (38 / 42))), need = (e: number) => ((bonf + 0.84) / (e * k)) ** 2;
+  console.log(`\n4. LIGHTER BALLS TOGETHER — ${lighter.length} draws: ${pct(p)} (z ${((p - base) / se).toFixed(2)}, 95 % interval ${pct(p - 1.96 * se)} to ${pct(p + 1.96 * se)}), ${pct(eff, 1)} likelier`);
+  console.log(`   To see a ball that much likelier in real draws (80 % power at the 43-ball threshold): ${Math.round(need(eff)).toLocaleString("en-US")} draws, ${Math.round(need(eff) / 156)} years at 156 a year.`);
+  console.log(`   With five ball sets drawn at random, a defect in one set is a fifth of that: ${Math.round(need(eff / 5)).toLocaleString("en-US")} draws.`);
+}
