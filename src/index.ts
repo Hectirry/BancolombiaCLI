@@ -262,6 +262,7 @@ baloto
   .option("--seed <number>", "Seed, for reproducible tickets")
   .option("--record", "Write these tickets to the ledger against the next draw, to be scored later")
   .option("--revancha", "Play the same tickets in the night's Revancha draw too: 1 − (1 − N/16)² instead of N/16")
+  .option("--note <text>", "With --record: a remark kept in the ledger entry, e.g. why this seed")
   .action(async (opts: Record<string, string>) => {
     const { superCommand } = await import("./commands/baloto.ts");
     await superCommand(opts as never);

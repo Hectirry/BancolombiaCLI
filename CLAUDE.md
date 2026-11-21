@@ -119,10 +119,12 @@ budget, say what the same pesos buy with Revancha (rule 6) and add
 been playing since 2026-10-24 is `-n 2 --revancha` ($18.000, 23.44 %), and
 since 2026-11-16 the seed is the first one, counting up from the date
 (MMDD), whose tickets all have a typical amplitude (max − min between 24 and
-35): the owner finds the other shapes senseless, every quintet is equally
-likely, and the tickets stay disjoint, so rule 5 holds. A second proposal for
-the same night replaces the first in the ledger, whatever the tiebreak (one
-`super/*` entry per night, `modelFamily`).
+35; `bun experiments/amplitude/seed.ts <MMDD> 2` prints it): the owner finds
+the other shapes senseless, every quintet is equally likely, and the tickets
+stay disjoint, so rule 5 holds. A second proposal for the same night takes
+the next such seed and replaces the first in the ledger, whatever the
+tiebreak (one `super/*` entry per night, `modelFamily`); say why in the entry
+with `--note`.
 Do not present RTP, breakeven jackpot or co-winner figures alongside it
 unless asked; the owner has said that reads as optimising payout again.
 

@@ -952,6 +952,7 @@ export async function superCommand(opts: {
   seed?: string;
   record?: boolean;
   revancha?: boolean;
+  note?: string;
 }): Promise<void> {
   const game = parseGame(opts.game);
   const dataset = await requireDataset();
@@ -1218,7 +1219,14 @@ export async function superCommand(opts: {
       game,
       model: `super/${plan.rule}`,
       tickets: handed,
-      note: `seed ${opts.seed ?? "none"}, mains by structure only (${structure.status})`,
+      // What produced the entry, in the entry: the seed, what ordered the
+      // balls when it was not the default, and whatever the caller adds.
+      note:
+        `seed ${opts.seed ?? "none"}, mains by structure only (${structure.status})` +
+        (learner !== undefined && plan.rule === tiebreak
+          ? `; balls ordered by "${learner.name}", an order among equally likely balls, not a prediction`
+          : "") +
+        (opts.note ? `; ${opts.note}` : ""),
       revancha,
       cost: night.cost,
     });

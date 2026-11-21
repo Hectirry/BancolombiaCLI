@@ -545,33 +545,33 @@
       "cost": 18000
     },
     {
-      "recordedAt": "2026-11-21T02:56:31.068Z",
+      "recordedAt": "2026-11-21T03:26:12.214Z",
       "targetDate": "2026-11-21",
       "game": "baloto",
-      "model": "super/posterior",
+      "model": "super/tracker",
       "tickets": [
         {
           "main": [
-            11,
-            18,
-            31,
-            37,
-            41
+            16,
+            26,
+            27,
+            41,
+            42
           ],
-          "super": 11
+          "super": 3
         },
         {
           "main": [
-            4,
-            20,
-            22,
-            27,
-            33
+            3,
+            19,
+            24,
+            32,
+            38
           ],
-          "super": 13
+          "super": 6
         }
       ],
-      "note": "seed 1126, mains by structure only (optimal); seed is the first from the date seed 1121 whose two tickets both have a typical amplitude (24–35), the owner's stated preference, which changes no probability (experiments/amplitude)",
+      "note": "seed 1134, mains by structure only (optimal); balls ordered by \"meta: tracking the best rule (fixed share)\", an order among equally likely balls, not a prediction; second proposal for this night: on 2026-11-20 22:00 COT the owner asked for different combinations and for algorithms that learn from the misses; replaces the super/posterior entry recorded 2026-11-21T02:56Z (11 18 31 37 41 + 11, 04 20 22 27 33 + 13); seed is the next after 1126, counting up from the date seed 1121, whose two tickets both have a typical amplitude (24–35), the owner's stated preference, which changes no probability (experiments/amplitude)",
       "revancha": true,
       "cost": 18000
     }

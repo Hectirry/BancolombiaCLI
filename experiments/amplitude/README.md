@@ -39,3 +39,13 @@ amplitude of 25–35, but so do 499 114 of the 962 598 tickets; 8.8 % of draws
 are ≤ 18, and so are 85 068 tickets. 0.519 / 499 114 = 0.088 / 85 068 =
 1 / 962 598. The draw lands in the big group more often and then has more
 tickets to choose from, in exact proportion.
+
+## `seed.ts` — tickets that look like an ordinary draw
+
+Asking for a typical amplitude costs nothing (above), and the owner prefers
+tickets shaped that way. `bun experiments/amplitude/seed.ts <MMDD> [tickets]`
+prints the first seed, counting up from the date, whose structure-only tickets
+(`optimiseCoverage`: disjoint) all have an amplitude within 24–35 — the middle
+half of the exact law. That seed goes to `baloto super --seed`. The main
+numbers are still chosen by structure alone; the amplitude only decides which
+of the equally likely arrangements is handed over.
