@@ -1,0 +1,579 @@
+{
+  "entries": [
+    {
+      "recordedAt": "restored:2026-09-09",
+      "targetDate": "2026-09-09",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            11,
+            20,
+            26,
+            33,
+            38
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            4,
+            17,
+            25,
+            32,
+            40
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            8,
+            15,
+            23,
+            30,
+            41
+          ],
+          "super": 7
+        }
+      ],
+      "note": "restored 2026-10-19 from the 2026-10-18 score table after a container reset; original recordedAt lost; this entry was itself a transcript backfill, not machine-stamped before its draw",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "restored:2026-09-12",
+      "targetDate": "2026-09-12",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            12,
+            21,
+            32,
+            33,
+            39
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            10,
+            20,
+            32,
+            37,
+            38
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            10,
+            23,
+            33,
+            35,
+            37
+          ],
+          "super": 7
+        }
+      ],
+      "note": "restored 2026-10-19 from the 2026-10-18 score table after a container reset; original recordedAt lost; this entry was itself a transcript backfill, not machine-stamped before its draw",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "restored:2026-09-19",
+      "targetDate": "2026-09-19",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            11,
+            21,
+            34,
+            37,
+            41
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            12,
+            29,
+            32,
+            34,
+            36
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            10,
+            26,
+            32,
+            36,
+            40
+          ],
+          "super": 7
+        }
+      ],
+      "note": "restored 2026-10-19 from the 2026-10-18 score table after a container reset; original recordedAt lost; this entry was itself a transcript backfill, not machine-stamped before its draw",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "restored:2026-10-03",
+      "targetDate": "2026-10-03",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            10,
+            20,
+            36,
+            37,
+            40
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            12,
+            21,
+            34,
+            35,
+            39
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            11,
+            25,
+            32,
+            33,
+            42
+          ],
+          "super": 7
+        }
+      ],
+      "note": "restored 2026-10-19 from the 2026-10-18 score table after a container reset; original recordedAt lost; this entry was itself a transcript backfill, not machine-stamped before its draw",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "restored:2026-10-05",
+      "targetDate": "2026-10-05",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            11,
+            25,
+            32,
+            33,
+            35
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            10,
+            20,
+            36,
+            38,
+            40
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            12,
+            22,
+            34,
+            37,
+            39
+          ],
+          "super": 7
+        }
+      ],
+      "note": "restored 2026-10-19 from the 2026-10-18 score table after a container reset; original recordedAt lost",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "restored:2026-10-07",
+      "targetDate": "2026-10-07",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            9,
+            16,
+            19,
+            23,
+            39
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            20,
+            29,
+            32,
+            33,
+            41
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            8,
+            10,
+            26,
+            34,
+            43
+          ],
+          "super": 7
+        }
+      ],
+      "note": "restored 2026-10-19 from the 2026-10-18 score table after a container reset; original recordedAt lost",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "restored:2026-10-10",
+      "targetDate": "2026-10-10",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            2,
+            5,
+            11,
+            20,
+            21
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            8,
+            23,
+            26,
+            32,
+            40
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            1,
+            10,
+            30,
+            31,
+            33
+          ],
+          "super": 7
+        }
+      ],
+      "note": "restored 2026-10-19 from the 2026-10-18 score table after a container reset; original recordedAt lost",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "restored:2026-10-12",
+      "targetDate": "2026-10-12",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            5,
+            17,
+            31,
+            33,
+            39
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            7,
+            9,
+            38,
+            42,
+            43
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            2,
+            4,
+            12,
+            23,
+            37
+          ],
+          "super": 7
+        }
+      ],
+      "note": "restored 2026-10-19 from the 2026-10-18 score table after a container reset; original recordedAt lost",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "2026-10-13T06:34:15.471Z",
+      "targetDate": "2026-10-14",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            2,
+            6,
+            17,
+            21,
+            43
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            9,
+            10,
+            16,
+            24,
+            31
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            5,
+            11,
+            13,
+            18,
+            27
+          ],
+          "super": 7
+        }
+      ],
+      "note": "seed 1014, mains by structure only (optimal)",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "2026-10-17T18:37:41.059Z",
+      "targetDate": "2026-10-17",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            7,
+            11,
+            25,
+            27,
+            38
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            3,
+            20,
+            29,
+            32,
+            42
+          ],
+          "super": 13
+        },
+        {
+          "main": [
+            5,
+            6,
+            13,
+            18,
+            26
+          ],
+          "super": 7
+        }
+      ],
+      "note": "seed 1017, mains by structure only (optimal)",
+      "revancha": false,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "2026-10-17T21:55:10.451Z",
+      "targetDate": "2026-10-17",
+      "game": "baloto",
+      "model": "ml/logistic",
+      "tickets": [
+        {
+          "main": [
+            5,
+            6,
+            34,
+            38,
+            40
+          ],
+          "super": 3
+        },
+        {
+          "main": [
+            2,
+            7,
+            21,
+            23,
+            43
+          ],
+          "super": 10
+        },
+        {
+          "main": [
+            1,
+            19,
+            35,
+            36,
+            37
+          ],
+          "super": 12
+        }
+      ],
+      "revancha": false,
+      "cost": 18000,
+      "note": "IRLS logistic on lag features; top-3 Súper, top-15 mains split across 3 disjoint tickets"
+    },
+    {
+      "recordedAt": "2026-10-25T01:16:05.798Z",
+      "targetDate": "2026-10-24",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            8,
+            11,
+            36,
+            41,
+            42
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            1,
+            19,
+            21,
+            26,
+            33
+          ],
+          "super": 13
+        }
+      ],
+      "note": "seed 1024, mains by structure only (optimal)",
+      "revancha": true,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "2026-11-07T02:04:59.152Z",
+      "targetDate": "2026-11-07",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            8,
+            11,
+            17,
+            21,
+            22
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            9,
+            13,
+            14,
+            19,
+            28
+          ],
+          "super": 13
+        }
+      ],
+      "note": "seed 1107, mains by structure only (optimal)",
+      "revancha": true,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "2026-11-17T01:37:04.031Z",
+      "targetDate": "2026-11-16",
+      "game": "baloto",
+      "model": "super/cold-on-request",
+      "tickets": [
+        {
+          "main": [
+            10,
+            25,
+            32,
+            33,
+            36
+          ],
+          "super": 8
+        },
+        {
+          "main": [
+            9,
+            13,
+            24,
+            34,
+            42
+          ],
+          "super": 1
+        }
+      ],
+      "note": "owner asked for two combinations 'with what was learned'; balls unchanged (lowest posterior, 8 and 1: nothing learned favours another pair); mains re-drawn disjoint with a typical amplitude (24–35), the owner's preference, which changes no probability (experiments/amplitude). Replaces the entry recorded 2026-11-16T07:48Z for the same draw (22 24 26 32 37 + 8, 01 03 29 39 42 + 1; kept in git history).",
+      "revancha": true,
+      "cost": 18000
+    },
+    {
+      "recordedAt": "2026-11-21T03:26:12.214Z",
+      "targetDate": "2026-11-21",
+      "game": "baloto",
+      "model": "super/tracker",
+      "tickets": [
+        {
+          "main": [
+            16,
+            26,
+            27,
+            41,
+            42
+          ],
+          "super": 3
+        },
+        {
+          "main": [
+            3,
+            19,
+            24,
+            32,
+            38
+          ],
+          "super": 6
+        }
+      ],
+      "note": "seed 1134, mains by structure only (optimal); balls ordered by \"meta: tracking the best rule (fixed share)\", an order among equally likely balls, not a prediction; second proposal for this night: on 2026-11-20 22:00 COT the owner asked for different combinations and for algorithms that learn from the misses; replaces the super/posterior entry recorded 2026-11-21T02:56Z (11 18 31 37 41 + 11, 04 20 22 27 33 + 13); seed is the next after 1126, counting up from the date seed 1121, whose two tickets both have a typical amplitude (24–35), the owner's stated preference, which changes no probability (experiments/amplitude)",
+      "revancha": true,
+      "cost": 18000
+    }
+  ]
+}
