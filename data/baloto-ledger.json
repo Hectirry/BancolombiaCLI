@@ -543,6 +543,37 @@
       "note": "owner asked for two combinations 'with what was learned'; balls unchanged (lowest posterior, 8 and 1: nothing learned favours another pair); mains re-drawn disjoint with a typical amplitude (24–35), the owner's preference, which changes no probability (experiments/amplitude). Replaces the entry recorded 2026-11-16T07:48Z for the same draw (22 24 26 32 37 + 8, 01 03 29 39 42 + 1; kept in git history).",
       "revancha": true,
       "cost": 18000
+    },
+    {
+      "recordedAt": "2026-11-21T02:56:31.068Z",
+      "targetDate": "2026-11-21",
+      "game": "baloto",
+      "model": "super/posterior",
+      "tickets": [
+        {
+          "main": [
+            11,
+            18,
+            31,
+            37,
+            41
+          ],
+          "super": 11
+        },
+        {
+          "main": [
+            4,
+            20,
+            22,
+            27,
+            33
+          ],
+          "super": 13
+        }
+      ],
+      "note": "seed 1126, mains by structure only (optimal); seed is the first from the date seed 1121 whose two tickets both have a typical amplitude (24–35), the owner's stated preference, which changes no probability (experiments/amplitude)",
+      "revancha": true,
+      "cost": 18000
     }
   ]
 }
