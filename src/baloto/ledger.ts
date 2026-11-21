@@ -108,12 +108,23 @@ export async function writeLedgerFile(path: string, ledger: Ledger): Promise<voi
   await writeFile(path, JSON.stringify(ledger, null, 2), "utf8");
 }
 
-const entryKey = (e: LedgerEntry) => `${e.targetDate}|${e.game}|${e.model}`;
+/**
+ * "super/posterior" → "super". A night holds one recommendation per model
+ * family: `super/posterior` and `super/tracker` are the same model ordering
+ * its balls two ways, and the owner plays one of them, not both — whereas an
+ * experiment such as `ml/logistic` is a different forecast for the same draw
+ * and is scored beside it.
+ */
+export function modelFamily(model: string): string {
+  return model.split("/")[0]!;
+}
+
+const entryKey = (e: LedgerEntry) => `${e.targetDate}|${e.game}|${modelFamily(e.model)}`;
 
 /**
  * Restore: add the backup's entries that the live ledger does not have. An
- * entry the live ledger already holds for the same (draw, game, model) is
- * kept as it is — the live file is the word that was said before the draw,
+ * entry the live ledger already holds for the same (draw, game, model family)
+ * is kept as it is — the live file is the word that was said before the draw,
  * and a backup never rewrites it.
  */
 export function mergeLedgers(live: Ledger, backup: Ledger): { ledger: Ledger; added: number; kept: number } {
@@ -137,14 +148,14 @@ export function nextDrawDate(date: string): string {
 }
 
 /**
- * Add an entry. One recommendation per (target, game, model): recording again
- * for the same draw replaces the earlier one, so the ledger holds the last
- * word said before the draw, not every draft.
+ * Add an entry. One recommendation per (target, game, model family): recording
+ * again for the same draw replaces the earlier one — also when the balls were
+ * ordered by a different tiebreak — so the ledger holds the last word said
+ * before the draw, not every draft, and never stakes one night twice.
  */
 export function recordRecommendation(ledger: Ledger, entry: LedgerEntry): Ledger {
-  const entries = ledger.entries.filter(
-    (e) => !(e.targetDate === entry.targetDate && e.game === entry.game && e.model === entry.model),
-  );
+  const key = entryKey(entry);
+  const entries = ledger.entries.filter((e) => entryKey(e) !== key);
   entries.push(entry);
   entries.sort((a, b) => a.targetDate.localeCompare(b.targetDate) || a.recordedAt.localeCompare(b.recordedAt));
   return { entries };

@@ -40,6 +40,25 @@ describe("recordRecommendation", () => {
     expect(ledger.entries[0]!.targetDate).toBe("2026-10-05");
     expect(ledger.entries[0]!.tickets[0]!.super).toBe(2);
   });
+
+  test("the same model with another tiebreak replaces the night's entry; a different model is scored beside it", () => {
+    const night = { game: "baloto" as const, targetDate: "2026-11-21", tickets: [{ main: [1, 2, 3, 4, 5], super: 11 }] };
+    let ledger: Ledger = { entries: [] };
+    ledger = recordRecommendation(ledger, { ...night, recordedAt: "2026-11-21T02:00:00Z", model: "super/posterior" });
+    ledger = recordRecommendation(ledger, { ...night, recordedAt: "2026-11-21T02:30:00Z", model: "ml/logistic" });
+    ledger = recordRecommendation(ledger, {
+      ...night,
+      recordedAt: "2026-11-21T04:00:00Z",
+      model: "super/tracker",
+      tickets: [{ main: [6, 7, 8, 9, 10], super: 3 }],
+    });
+    // One stake for the night from `super`, not two; the experiment stays.
+    expect(ledger.entries.map((e) => e.model)).toEqual(["ml/logistic", "super/tracker"]);
+    expect(ledger.entries[1]!.tickets[0]!.super).toBe(3);
+    // The other machine's entry for the same date is a different night's worth of tickets.
+    ledger = recordRecommendation(ledger, { ...night, game: "revancha", recordedAt: "2026-11-21T04:10:00Z", model: "super/posterior" });
+    expect(ledger.entries).toHaveLength(3);
+  });
 });
 
 describe("scoreLedger", () => {
@@ -233,6 +252,16 @@ describe("backup and restore", () => {
     const again = mergeLedgers(merged.ledger, backup);
     expect(again.added).toBe(0);
     expect(again.ledger).toEqual(merged.ledger);
+  });
+
+  test("restore does not bring back a recommendation the live ledger replaced with another tiebreak", async () => {
+    const { mergeLedgers } = await import("../src/baloto/ledger.ts");
+    const live: Ledger = { entries: [entry("2026-11-21", "super/tracker")] };
+    const backup: Ledger = { entries: [entry("2026-11-21", "super/posterior"), entry("2026-11-21", "ml/logistic")] };
+    const merged = mergeLedgers(live, backup);
+    expect(merged.ledger.entries.map((e) => e.model).sort()).toEqual(["ml/logistic", "super/tracker"]);
+    expect(merged.added).toBe(1);
+    expect(merged.kept).toBe(1);
   });
 
   test("the backup path is data/baloto-ledger.json at the package root, and files round-trip", async () => {

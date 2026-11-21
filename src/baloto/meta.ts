@@ -80,6 +80,8 @@ export class SuperChoiceCache {
   private choices = new Map<number, (number[][] | undefined)[]>();
   /** cumulative.get(tickets)[length] = hits of each base rule over draws k ∈ [start, length). */
   private cumulative = new Map<number, (number[] | undefined)[]>();
+  /** perDraw.get(tickets)[k] = hit (1) or miss (0) of each base rule on draw k. */
+  private perDraw = new Map<number, (Uint8Array | undefined)[]>();
 
   constructor(
     readonly base: SuperRule[],
@@ -95,6 +97,7 @@ export class SuperChoiceCache {
         this.supers = [];
         this.choices.clear();
         this.cumulative.clear();
+        this.perDraw.clear();
         break;
       }
     }
@@ -162,6 +165,33 @@ export class SuperChoiceCache {
       byLength[k + 1] = acc;
     }
     return { hits: byLength[L]!.slice(), trials: L - this.start };
+  }
+
+  /**
+   * Hit (1) or miss (0) of every base rule on each draw k ∈ [start,
+   * past.length), in order — the sequence a learner that updates after every
+   * draw needs, where `record()` only gives the running total. Same nested
+   * walk-forward: the choice scored on draw k was made from the first k draws.
+   */
+  hitsByDraw(past: Draw[], tickets: number): Uint8Array[] {
+    const { trials } = this.record(past, tickets);
+    const totals = this.cumulative.get(tickets)!;
+    let rows = this.perDraw.get(tickets);
+    if (!rows) {
+      rows = [];
+      this.perDraw.set(tickets, rows);
+    }
+    const out: Uint8Array[] = [];
+    for (let k = this.start; k < this.start + trials; k++) {
+      let row = rows[k];
+      if (!row) {
+        const before = totals[k]!;
+        row = Uint8Array.from(totals[k + 1]!, (after, r) => after - before[r]!);
+        rows[k] = row;
+      }
+      out.push(row);
+    }
+    return out;
   }
 
   /** The base rules themselves, served through this cache, under their own names. */
@@ -300,4 +330,71 @@ export function metaSuperRules(base: SuperRule[], options: MetaOptions = {}): Su
   }
 
   return rules;
+}
+
+export interface TrackingOptions extends MetaOptions {
+  /** Learning rate: a rule that misses a draw keeps exp(−η) of its weight. Default 0.5. */
+  eta?: number;
+  /** Share: the fraction of every weight pooled back to all rules after each draw. Default 1/50. */
+  share?: number;
+}
+
+/**
+ * The weights fixed share gives the base rules before the draw that follows
+ * `past`: Hedge's multiplicative update on each draw's hit or miss, then a
+ * fraction `share` of every weight redistributed evenly (Herbster & Warmuth,
+ * 1998). Uniform while there is no record.
+ */
+export function trackingWeights(cache: SuperChoiceCache, past: Draw[], tickets: number, eta = 0.5, share = 1 / 50): number[] {
+  const N = cache.base.length;
+  const w = new Array<number>(N).fill(N > 0 ? 1 / N : 0);
+  if (N === 0) return w;
+  const keep = Math.exp(-eta);
+  for (const hit of cache.hitsByDraw(past, tickets)) {
+    let total = 0;
+    for (let r = 0; r < N; r++) {
+      if (!hit[r]) w[r] = w[r]! * keep;
+      total += w[r]!;
+    }
+    for (let r = 0; r < N; r++) w[r] = ((1 - share) * w[r]!) / total + share / N;
+  }
+  return w;
+}
+
+/**
+ * TRACKING THE BEST RULE. The Bayesian average above weighs every rule by its
+ * whole record, so a rule that was right for three years and stopped being
+ * right keeps its lead for three more. Fixed share is the algorithm built for
+ * that failure: it learns from every miss like Hedge does, and after each draw
+ * hands a small share of all the weight back to everyone, which bounds how far
+ * behind any rule can fall and lets the mixture follow a *sequence* of best
+ * rules. Its regret against the best such sequence with k switches is
+ * O(√(T·(k log N + log T))) — the guarantee a bettor means by "adapt when the
+ * system stops working".
+ *
+ * η = 0.5 is the temperature of the existing Bayesian average, so the two
+ * differ only in the sharing; share = 1/50 expects the best rule to change
+ * about every fifty draws. Both were fixed before the rule was scored.
+ *
+ * It reads the same nested record as the other meta-rules and is entered
+ * after them, over the same base rules, so their records are not disturbed.
+ * And it is bound by the same argument: a weighted vote changes which n
+ * distinct balls are played, never how many.
+ */
+export function trackingSuperRules(base: SuperRule[], options: TrackingOptions = {}): SuperRule[] {
+  const cache = options.cache ?? new SuperChoiceCache(base, options.start ?? 50);
+  const eta = options.eta ?? 0.5;
+  const share = options.share ?? 1 / 50;
+  return [
+    {
+      name: "meta: tracking the best rule (fixed share)",
+      choose: (past, n) => {
+        if (base.length === 0) return Array.from({ length: Math.min(n, SUPER_POOL) }, (_, i) => i + 1);
+        const weights = trackingWeights(cache, past, n, eta, share);
+        const votes = new Array<number>(SUPER_POOL).fill(0);
+        castVotes(cache.choicesAt(past, n), weights, n, votes, true);
+        return topVoted(votes, n);
+      },
+    },
+  ];
 }

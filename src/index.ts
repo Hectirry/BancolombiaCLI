@@ -253,7 +253,11 @@ baloto
   .option("-g, --game <game>", "baloto or revancha", "baloto")
   .option("-n, --tickets <number>", "Tickets to spend, one distinct Súper Balota each", "3")
   .option("--prior <number>", "Dirichlet strength: higher assumes a fairer machine", "1")
-  .option("--tiebreak <rule>", "Order among equally likely balls: posterior (default) or crowd", "posterior")
+  .option(
+    "--tiebreak <rule>",
+    "Order among equally likely balls: posterior (default), crowd, or a learner: tracker, ctw, changepoint, thompson",
+    "posterior",
+  )
   .option("--warmup <number>", "Draws reserved before the rule tournament scores", "400")
   .option("--seed <number>", "Seed, for reproducible tickets")
   .option("--record", "Write these tickets to the ledger against the next draw, to be scored later")

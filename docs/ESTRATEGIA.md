@@ -76,6 +76,19 @@ jugadas dan la misma tasa de acierto (14,8 % vs 19,4 %, ambas dentro de
 ±2σ de 18,8 %) y 1,53× el premio por ganador en las categorías +SB. Es un
 criterio de pago, y por eso no es el predeterminado.
 
+Desde el 21 de noviembre de 2026 hay otra familia de desempates, del lado del
+acierto y no del pago: `--tiebreak tracker | ctw | changepoint | thompson`
+entrega el orden a un algoritmo que se actualiza después de cada sorteo
+(seguimiento de la mejor regla con *fixed share*, predictor universal por
+*context-tree weighting*, detección bayesiana de cambio de régimen en línea
+y muestreo de Thompson). Los cuatro están en el torneo y los cuatro quedan
+dentro del ruido en las dos máquinas (28 reglas, umbral 3,12; el seguidor da
++1,58 en Baloto y −1,89 en Revancha con dos balotas). El predictor universal
+termina con el 100 % de su peso en «no hay memoria» y por eso juega siempre
+las más frecuentes: 11 y 13. El seguidor, en cambio, cambió de pareja en 15
+de las últimas 16 noches. Usarlo no sube ni baja la probabilidad: sigue
+siendo N/16. Lo que cambia es que las balotas dejan de repetirse.
+
 ## Lo que ninguna regla puede hacer
 
 Cada combinación sigue teniendo probabilidad 1 en 15.401.568. Las cinco

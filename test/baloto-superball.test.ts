@@ -137,6 +137,35 @@ describe("planSuperCoverage", () => {
     expect(plan.hitProbability).toBeCloseTo(3 / SUPER_POOL, 12);
   });
 
+  test("takes an order from a tournament rule: same probability, the rule's balls first", () => {
+    const plan = planSuperCoverage(draws, 3, { order: { rule: "tracker", balls: [9, 2, 14] } });
+    expect(plan.rule).toBe("tracker");
+    expect(plan.balls).toEqual([9, 2, 14]);
+    expect(plan.hitProbability).toBeCloseTo(3 / SUPER_POOL, 12);
+    // It outranks the crowd tiebreak too: both are orders, and this one was asked for by name.
+    const crowd = Array.from({ length: SUPER_POOL }, (_, i) => (i + 1) / 136);
+    const both = planSuperCoverage(draws, 2, { tiebreak: "least-played", superWeights: crowd, order: { rule: "ctw", balls: [16, 15] } });
+    expect(both.balls).toEqual([16, 15]);
+    expect(both.rule).toBe("ctw");
+  });
+
+  test("an order that is short, repeated or illegal is completed with distinct balls in posterior order", () => {
+    const means = superPosterior(draws).sort((a, b) => b.mean - a.mean).map((p) => p.ball);
+    const plan = planSuperCoverage(draws, 4, { order: { rule: "tracker", balls: [5, 5, 0, 17, 2.5, 5] } });
+    expect(plan.balls[0]).toBe(5);
+    expect(plan.balls).toHaveLength(4);
+    expect(new Set(plan.balls).size).toBe(4);
+    expect(plan.balls.slice(1)).toEqual(means.filter((b) => b !== 5).slice(0, 3));
+    expect(plan.hitProbability).toBeCloseTo(4 / SUPER_POOL, 12);
+  });
+
+  test("a handed-in order never overrules a ball the evidence separates", () => {
+    const rigged = history(600, 9, (i) => (i % 3 === 0 ? 4 : 1 + ((i * 7) % SUPER_POOL)));
+    const plan = planSuperCoverage(rigged, 1, { order: { rule: "tracker", balls: [9] } });
+    expect(plan.balls[0]).toBe(4);
+    expect(plan.rule).toBe("posterior");
+  });
+
   test("says so when asked for a crowd tiebreak without a crowd model", () => {
     const plan = planSuperCoverage(draws, 3, { tiebreak: "least-played" });
     expect(plan.rule).toBe("arbitrary");

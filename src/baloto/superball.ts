@@ -120,8 +120,11 @@ export interface SuperPlan {
   distinguishable: number[];
   /** Posterior spread between the best and worst ball, in percentage points. */
   spreadPoints: number;
-  /** What actually decided the order. */
-  rule: "posterior" | "least-played" | "arbitrary";
+  /**
+   * What actually decided the order: "posterior", "least-played", "arbitrary",
+   * or the label of the order the caller handed in (`CoverageOptions.order`).
+   */
+  rule: string;
   /**
    * Expected co-winners on the chosen balls relative to an average ball. Below
    * 1 means fewer people share the prize; it never moves `hitProbability`.
@@ -145,6 +148,15 @@ export interface CoverageOptions {
    * the crowd model. Only consulted when `tiebreak` is "least-played".
    */
   superWeights?: number[];
+  /**
+   * An order handed in by the caller: what a tournament rule — one of the
+   * online learners, say — would play on these draws. It is an order among
+   * balls the evidence cannot separate and nothing more: a distinguishable
+   * ball still comes first, and the hit probability is tickets/16 whichever
+   * distinct balls are covered. Illegal or repeated balls are dropped and the
+   * list is completed in posterior order. Takes precedence over `tiebreak`.
+   */
+  order?: { rule: string; balls: number[] };
 }
 
 /**
@@ -180,12 +192,21 @@ export function planSuperCoverage(
     weights.every((w) => Number.isFinite(w) && w > 0);
 
   const tiebreak = opts.tiebreak ?? "posterior";
+  const byMean = [...posterior].sort((a, b) => b.mean - a.mean);
   let ranked: SuperPosterior[];
   let rule: SuperPlan["rule"];
-  if (separable.length > 0 || tiebreak === "posterior") {
+  if (separable.length === 0 && opts.order !== undefined) {
+    // Nothing separates the balls and the caller brought an order of its own.
+    const first = new Set<number>();
+    for (const b of opts.order.balls) {
+      if (Number.isInteger(b) && b >= 1 && b <= SUPER_POOL) first.add(b);
+    }
+    ranked = [...[...first].map((b) => posterior[b - 1]!), ...byMean.filter((p) => !first.has(p.ball))];
+    rule = opts.order.rule;
+  } else if (separable.length > 0 || tiebreak === "posterior") {
     // Either the evidence separates the balls, or the caller wants the Bayes
     // action for a pure hit objective regardless: highest posterior mean first.
-    ranked = [...posterior].sort((a, b) => b.mean - a.mean);
+    ranked = byMean;
     rule = "posterior";
   } else if (usable) {
     ranked = [...posterior].sort((a, b) => weights![a.ball - 1]! - weights![b.ball - 1]!);

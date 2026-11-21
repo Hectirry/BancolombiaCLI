@@ -47,7 +47,20 @@ Rules that follow from that objective, all of them measured:
    No ball is distinguishable from 1/16 once all sixteen intervals are read
    simultaneously (Bonferroni over 16: Φ⁻¹(1 − 0.025/16) = 2.9552, computed by
    `bonferroniZ`; an earlier hard-coded 2.8945 was a 6 % family level and was
-   caught in audit — exact Beta quantiles are used now, `numeric.ts`). Any new rule must be entered in that
+   caught in audit — exact Beta quantiles are used now, `numeric.ts`).
+   Since 2026-11-21 the tournament also enters four **online learners** —
+   the algorithms sequential-prediction theory gives for "learn from every
+   miss" — appended after the meta-rules so nobody else's record moves:
+   tracking the best rule with fixed share (Herbster–Warmuth, `meta.ts`,
+   η = 0.5, share 1/50), context-tree weighting to depth 2, Bayesian online
+   change-point detection (hazard 1/200) and Thompson sampling
+   (`src/baloto/online.ts`); every parameter fixed in advance, none tuned.
+   Twenty-eight rules, |z| > 3.12, 594 draws. Baloto with 3 balls: tracker
+   120 (z = +0.91), CTW 119 (+0.80), change-point 108 (−0.35), Thompson 104
+   (−0.78); with 2 balls +1.58, −0.16, −0.65, −1.27. Revancha as
+   replication: −0.99, −0.35, −0.35, +0.17 with 3 and −1.89, −0.16, −0.78,
+   +0.22 with 2 — the tracker's sign flips between the two machines.
+   Nothing clears. Any new rule must be entered in that
    tournament and clear its Bonferroni threshold before it changes a
    recommendation.
 4. **The order among equally likely balls is the objective's own tiebreak:
@@ -55,6 +68,22 @@ Rules that follow from that objective, all of them measured:
    objective, and the report must say in the same breath that the gap is
    inside noise. `--tiebreak crowd` (least-played balls) is opt-in only,
    because it is a payout criterion — it never becomes the default.
+   `--tiebreak tracker | ctw | changepoint | thompson` hands the order to one
+   of the online learners of rule 3. That is a hit-side order, not a payout
+   one, and it is still only an order: a distinguishable ball comes first
+   whatever the learner says (`planSuperCoverage`, option `order`), the
+   probability printed is the same N/16, and the report names the learner
+   with its z and the threshold and says it is not a prediction. The code
+   default stays the posterior mean. **Which order the owner is handed:** the
+   posterior order is 11-13-7 on every night since September, because the
+   all-time count barely moves — and the owner objected to exactly that three
+   times (2026-10-24, 2026-11-16, and 2026-11-20: "siempre me das las mismas
+   combinaciones por que no aprendes de los desaciertos e intentas algoritmos
+   nuevos e innovadores"). Since 2026-11-21 the tickets handed to the owner
+   take `--tiebreak tracker`, which re-weights the rules after every draw and
+   changed its pair on 15 of the last 16 nights (39 of the last 60). It costs
+   no probability and buys none; say both. If the owner asks for the fixed
+   balls back, drop the flag.
 5. **The five main numbers are free, and chosen by structure only.** The
    Súper Balota objective does not constrain them and every quintet is
    exactly as likely as every other. They are filled by `optimiseCoverage`
@@ -81,11 +110,19 @@ Rules that follow from that objective, all of them measured:
    (`docs/ESTRATEGIA.md` rule 2 is the payout view, and stays separate).
 
 When asked for "combinaciones para hoy", run
-`bun src/index.ts baloto super -n 3 --seed <n> --record` and report
+`bun src/index.ts baloto super -n 3 --seed <n> --tiebreak tracker --record`
+and report
 the coverage probability (N/16), P(win anything) from the budget curve, the
 balls, and the honest caveat in rule 4. If the owner is spending a fixed
 budget, say what the same pesos buy with Revancha (rule 6) and add
-`--revancha` so the ledger scores both draws.
+`--revancha` so the ledger scores both draws. What the owner has actually
+been playing since 2026-10-24 is `-n 2 --revancha` ($18.000, 23.44 %), and
+since 2026-11-16 the seed is the first one, counting up from the date
+(MMDD), whose tickets all have a typical amplitude (max − min between 24 and
+35): the owner finds the other shapes senseless, every quintet is equally
+likely, and the tickets stay disjoint, so rule 5 holds. A second proposal for
+the same night replaces the first in the ledger, whatever the tiebreak (one
+`super/*` entry per night, `modelFamily`).
 Do not present RTP, breakeven jackpot or co-winner figures alongside it
 unless asked; the owner has said that reads as optimising payout again.
 
@@ -139,6 +176,7 @@ a tiebreak.
 | Extreme-value / scan statistics | a window where one ball ran hot | TESTED `physical`: max 3.61σ over 110 596 cells vs 5.11σ critical; Súper 10/14 at p=0.078 corrected |
 | Power analysis | what size of bias the data could even see | TESTED: 80 % power only for a ball ≥2× (main) or ≥2.4× (Súper) likelier at W=200. "Clean" means "no bias ≥ +100 %", not "no bias". |
 | Change-point detection (CUSUM / max-χ² over split points) | a ball set swapped mid-history | TESTED 2026-10-04: real max χ² 124 vs fair median 134, p=0.89 — no regime change |
+| Bayesian online change-point detection (Adams–MacKay: a posterior over how long the current regime has lasted, hazard 1/200, Dirichlet-multinomial inside each regime) | a regime that changed recently, and a forecast rebuilt from the draws since | TESTED 2026-11-21 `online.ts`, ENTERED: it believes the current regime covers 863 of 994 Baloto draws and 951 of 994 Revancha draws, and gives 10.7 % and 3.6 % to a change within the last 50 against 22.2 % from the hazard alone — the evidence argues *against* a change. As a rule: z −0.35 (Baloto, 3 balls) and −0.35 (Revancha) against 3.12. On a planted change (ball 3 at 30 % for 400 draws, then ball 12 at 40 % for 150) it dates the change at 142 draws for a true 150 and hits 41/110 against 8/110 for the all-time count, so the null on the real draws is a finding, not blindness. |
 | Self-exciting point process (Hawkes-like: P(ball\|seen in last w)) | the "persist" / hot-hand effect | TESTED 2026-10-04: ratio 1.12 (w=1), 1.04, 1.02, 1.01 (w=2,4,6) against 1.00; all inside the fair 95 % band (p 0.19–0.40) |
 | Hidden Markov / regime models | latent machine states | TESTED 2026-10-04 `regime`: 2-state HMM log-lik −2687.6 vs i.i.d. −2693.3, but BIC 5602 vs 5490 — i.i.d. wins by 112 nats; the HMM predictive is ENTERED in the tournament (117/574, z=+1.00) |
 | Dependence between Baloto and Revancha (same night) | shared machine quirks | TESTED 2026-10-04 `regime`: 16×16 permutation χ² = 239.6, p = 0.25; same Súper 47 vs 60.9 expected (p = 0.98) — independent |
@@ -149,6 +187,7 @@ a tiebreak.
 | --- | --- | --- |
 | Compressibility (gzip as a Kolmogorov proxy) | any regularity a universal coder can exploit | TESTED 2026-10-04: Súper 529 bytes vs fair median 530 (P=0.38); main numbers 3 386 vs 3 380 — real is *less* compressible than 98.7 % of fair histories |
 | Entropy rate / conditional entropy H(Xₜ\|Xₜ₋₁) | first-order memory | TESTED 2026-10-04: 3.806 bits vs fair median 3.809 (max 4.0), P=0.42 — no memory |
+| Universal prediction (context-tree weighting, Willems–Shtarkov–Tjalkens: a Bayesian mixture over every variable-order Markov model to depth 2, updated one ball at a time) | memory of any finite order — "13 follows 4", "after two 7s a 2" — without naming it in advance | TESTED 2026-11-21 `online.ts`, ENTERED: it codes the 994 Baloto Súper Balotas in 4 023 bits and Revancha's in 4 024, against 3 976 for a coder that simply knows the sixteen are equally likely — learning cost 47 bits and bought nothing. Posterior weight on "no memory at all": 100.0 % on both machines (prior 50 %). It therefore plays the most frequent balls, 11-13, every night: the best learner theory offers reproduces the posterior order, which is why the balls repeated. z −0.16 (2 balls) and +0.80 (3) on Baloto, −0.16 and −0.35 on Revancha. On planted second-order memory it hits 48 % with one ball (z = +38.8). |
 | NIST SP 800-22 battery (runs, longest run, serial, approximate entropy) | PRNG-style defects | OPEN but low value: the draw is mechanical, not algorithmic; `stats` already covers runs and serial correlation |
 | Benford / digit laws | human-generated or tampered sequences | N/A: uniform discrete 1..43 does not follow Benford by construction; a "deviation" would be an artefact |
 
@@ -203,10 +242,13 @@ That is a watch item, not a lever: over-uniformity cannot be bet on.
 | Kelly criterion / bankroll | how much to stake | N/A for a negative-expectation bet: Kelly fraction is ≤ 0 below the breakeven jackpot; this is budgeting, not prediction |
 | Optimal stopping | *when* to play | TESTED `ev` / `forecast` (jackpot threshold, Mondays) — payout side, see `docs/ESTRATEGIA.md` |
 | Meta-rules / online model selection (follow the leader, exponential-weights average, contrarian, recency ensemble) | a base rule whose *record* predicts its next hit | TESTED 2026-10-06 `meta.ts`, ENTERED in the `super` tournament: all five inside noise (best +2.26 vs 2.99 over 18 rules). On a fair machine every base rule hits each draw at n/16 regardless of its record, so a selector among them covers n distinct balls and hits at exactly n/16 too: it can only inherit skill, never create it. The leader on the real history (standard base) was "persist" 347 draws and "hot" 228, switching nine times — a random walk being chased. |
+| Tracking the best expert (fixed share, Herbster–Warmuth: exponential weights that keep a floor under every rule, so the forecaster can follow a *sequence* of leaders instead of the best one overall) | a rule that is good for a season and then stops — which follow-the-leader and the Bayesian average are too slow to drop | TESTED 2026-11-21 `meta.ts` (`trackingSuperRules`, η = 0.5, share 1/50, fixed in advance), ENTERED: Baloto 120/594 (z = +0.91) with 3 balls and 87/594 (+1.58) with 2; Revancha 102 (−0.99) and 59 (−1.89). Same algorithm, opposite signs on twin machines: noise. Over 60 fair histories its z averages +0.14 with sd 1. In the tests, with two one-note experts whose turn changes, it follows the switch that the Bayesian average sleeps through. Its weight on 2026-11-21: "repeat the last drawn" 19 %, "cold" 11 %, "hot-100" 10 % — nobody in charge. Used since 2026-11-21 as the order of the balls handed to the owner (rule 4), because it changes almost every night; that is variety, not skill. |
+| Thompson sampling / bandits (draw one plausible machine from the Dirichlet posterior, play its best balls) | nothing by itself — it is how a learner keeps exploring while evidence is thin | TESTED 2026-11-21 `online.ts`, ENTERED: z −0.78 / −1.27 (Baloto, 3 / 2 balls), +0.17 / +0.22 (Revancha). The sixteen arms pay the same, so exploring and exploiting coincide. Its balls change every night by construction (16 of the last 16). |
 
 ### What this registry means operationally
-1. Prediction of *which* numbers: eighteen Súper rules (thirteen base, five
-   meta), fourteen main-number strategies, and six information-theoretic
+1. Prediction of *which* numbers: twenty-eight Súper rules (thirteen base,
+   six of the cold family, five meta, four online learners), fourteen
+   main-number strategies, and six information-theoretic
    tests say the same thing. The
    working hypothesis is exchangeability, and the burden of proof is on any
    new technique, in a tournament, at the Bonferroni threshold.

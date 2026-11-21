@@ -371,7 +371,30 @@ posterior mean first — with the report saying plainly that the gap is noise.
 `--tiebreak crowd` instead prefers the least-played balls: out of sample the
 hit rate is statistically identical (14.8 % vs 19.4 %, both within 2σ of
 18.75 %) while the +Súper tiers pay 1.53× more per winner on 19 % fewer
-co-winners. That is a payout criterion, which is why it is opt-in. The five
+co-winners. That is a payout criterion, which is why it is opt-in.
+
+`--tiebreak tracker | ctw | changepoint | thompson` hands the order to a
+learner that updates after every draw (`src/baloto/online.ts`, and
+`trackingSuperRules` in `meta.ts`). They are the algorithms that the theory of
+sequential prediction offers for "learn from every miss", each with a
+guarantee: tracking the best rule with fixed share follows a *sequence* of
+leaders; context-tree weighting is the universal predictor for memory of any
+finite order; Bayesian online change-point detection keeps a posterior over
+how long the current regime has lasted; Thompson sampling plays the best
+balls of one machine drawn from the posterior. All four are entered in the
+tournament (twenty-eight rules, |z| > 3.12) and all four are inside noise on
+both machines — the tracker at +1.58 on Baloto and −1.89 on Revancha with two
+balls. The tests plant memory, a change of regime and a switch of leader and
+each learner finds its own, so the null on the real draws is a result: the
+universal predictor ends with 100 % of its weight on "no memory at all" and
+codes the history in 4 023 bits against 3 976 for a coder that simply knows
+the balls are equally likely. A learner's order is therefore an order and
+nothing else — the probability printed is the same N/16, and a ball the
+evidence separates still comes first. What it changes is that the balls move:
+the posterior order has been 11-13-7 since September, the tracker changed its
+pair on 15 of the last 16 nights.
+
+The five
 main numbers are chosen by structure alone (`optimiseCoverage`), because the
 Súper-Balota objective does not constrain them and every quintet is equally
 likely — no popularity or shape criterion, with one exact rule: the tickets

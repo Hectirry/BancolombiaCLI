@@ -28,6 +28,7 @@ import {
 } from "../baloto/bias.ts";
 import { expectedValue } from "../baloto/ev.ts";
 import { pickTickets } from "../baloto/pick.ts";
+import type { SuperRule } from "../baloto/superball.ts";
 import {
   ECONOMICS,
   MAIN_POOL,
@@ -920,6 +921,22 @@ export async function summaryCommand(): Promise<void> {
 }
 
 /**
+ * How the report describes balls ordered by a learner: which one, where it
+ * stands in the tournament, and that the order is not evidence.
+ */
+function learnerOrder(name: string, scores: { name: string; z: number }[], threshold: number): string {
+  const score = scores.find((s) => s.name === name);
+  const standing = score
+    ? `In the tournament it stands at z = ${score.z >= 0 ? "+" : ""}${score.z.toFixed(2)} against a threshold of ${threshold.toFixed(2)}: inside noise.`
+    : "";
+  return (
+    `chosen by "${name}", which re-reads the record after every draw.\n  ${standing}\n` +
+    "  It is an order among equally likely balls, not a prediction: the hit probability above is exact\n" +
+    "  whichever sixteenths you cover"
+  );
+}
+
+/**
  * `baloto super` — the model whose only objective is hitting the Súper Balota.
  *
  * It reports three things in order of how much they matter: the tournament
@@ -963,13 +980,30 @@ export async function superCommand(opts: {
   const warmup = opts.warmup ? Number.parseInt(opts.warmup, 10) : 400;
   const { algorithmSuperRules } = await import("../baloto/algorithms.ts");
   const { hmmSuperRule } = await import("../baloto/regime.ts");
-  const { SuperChoiceCache, metaSuperRules } = await import("../baloto/meta.ts");
+  const { SuperChoiceCache, metaSuperRules, trackingSuperRules } = await import("../baloto/meta.ts");
+  const { onlineSuperRules, ctw, changePoint } = await import("../baloto/online.ts");
   // The meta-rules (follow the leader, Bayesian average, contrarian, recency
   // ensemble) read the base rules' nested walk-forward record; the shared cache
   // makes each base choice once for both the base entries and the meta entries.
   const baseRules = [...standardSuperRules(priorStrength, model.super), ...algorithmSuperRules(), hmmSuperRule()];
   const cache = new SuperChoiceCache(baseRules);
-  const rules = [...cache.cached(), ...metaSuperRules(baseRules, { cache })];
+  // The learners that update after every draw come last, so that entering them
+  // moves nobody else's record: the tracker reads the same base rules through
+  // the same cache, and the three in online.ts read the draws alone.
+  const [tracker] = trackingSuperRules(baseRules, { cache });
+  const [universal, changeLearner, thompson] = onlineSuperRules();
+  const learners: Record<string, SuperRule> = {
+    tracker: tracker!,
+    ctw: universal!,
+    changepoint: changeLearner!,
+    thompson: thompson!,
+  };
+  const tiebreak = opts.tiebreak ?? "posterior";
+  const learner = learners[tiebreak];
+  if (tiebreak !== "posterior" && tiebreak !== "crowd" && learner === undefined) {
+    throw new Error(`--tiebreak must be posterior, crowd or a learner: ${Object.keys(learners).join(", ")}.`);
+  }
+  const rules = [...cache.cached(), ...metaSuperRules(baseRules, { cache }), ...Object.values(learners)];
   const scores = scoreSuperRules(draws, rules, tickets, warmup);
   const base = tickets / SUPER_POOL;
   console.log(
@@ -997,15 +1031,33 @@ export async function superCommand(opts: {
   );
   console.log("");
 
+  // What the learners make of the history: has anything been learned at all?
+  const supers = draws.map((d) => d.super);
+  const memory = ctw(supers);
+  const regime = changePoint(supers);
+  console.log(
+    c.dim(
+      `  What the learners found. Memory: the universal predictor codes the history in ` +
+        `${(memory.codeLength / Math.LN2).toFixed(0)} bits; a coder that
+  knows the sixteen balls are equally likely needs ` +
+        `${(memory.uniformCodeLength / Math.LN2).toFixed(0)}. It puts ${pct(memory.memorylessWeight)} on "no memory at all"
+` +
+        `  (prior 50 %). Regime: the change-point learner believes the current one has lasted ` +
+        `${regime.runLength.toFixed(0)} of ${supers.length} draws
+  and gives ${pct(regime.recentChange)} to a change in the last ` +
+        `${regime.window} (${pct(regime.recentChangePrior)} with no evidence either way).`,
+    ),
+  );
+  console.log("");
+
   // 2. The posterior, and whether any ball is separable at all.
   const posterior = superPosterior(draws, priorStrength);
-  if (opts.tiebreak !== undefined && opts.tiebreak !== "posterior" && opts.tiebreak !== "crowd") {
-    throw new Error('--tiebreak must be "posterior" or "crowd".');
-  }
   const plan = planSuperCoverage(draws, tickets, {
     priorStrength,
-    tiebreak: opts.tiebreak === "crowd" ? "least-played" : "posterior",
+    tiebreak: tiebreak === "crowd" ? "least-played" : "posterior",
     superWeights: model.super,
+    // A learner orders the balls; it does not get to claim it predicts them.
+    order: learner ? { rule: tiebreak, balls: learner.choose(draws, tickets) } : undefined,
   });
   if (plan.distinguishable.length === 0) {
     console.log(
@@ -1046,7 +1098,9 @@ export async function superCommand(opts: {
       : plan.rule === "least-played"
         ? `ranked by how few people play them (${plan.crowding.toFixed(2)}× the average crowd), ` +
           "which costs nothing:\n  the hit probability above is exact whichever sixteenths you cover"
-        : "in no particular order — nothing separates them";
+        : learner !== undefined && plan.rule === tiebreak
+          ? learnerOrder(learner.name, scores, bonferroniZ(rules.length))
+          : "in no particular order — nothing separates them";
   console.log(c.dim(`  Balls ${plan.balls.join(", ")}, ${order}.`));
   console.log("");
 
